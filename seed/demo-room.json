@@ -1,0 +1,62 @@
+{
+  "trip": {
+    "id": "demo-japan-7d",
+    "name": "日本旅行探索",
+    "inviteCode": "JPN7DAY",
+    "roughDestination": "日本",
+    "currentFocusNodeId": "japan",
+    "members": [
+      { "id": "m-anna", "displayName": "安安", "avatarUrl": "安", "role": "organizer" },
+      { "id": "m-bo", "displayName": "博文", "avatarUrl": "博", "role": "member" },
+      { "id": "m-chen", "displayName": "晨晨", "avatarUrl": "晨", "role": "member" },
+      { "id": "m-ding", "displayName": "丁丁", "avatarUrl": "丁", "role": "member" }
+    ]
+  },
+  "messages": [
+    {
+      "id": "msg-1",
+      "tripId": "demo-japan-7d",
+      "authorType": "member",
+      "authorMemberId": "m-anna",
+      "messageType": "user_text",
+      "textContent": "我们想去日本旅游。",
+      "visibility": "group",
+      "createdAt": "2026-08-23T09:00:00.000Z"
+    },
+    {
+      "id": "msg-2",
+      "tripId": "demo-japan-7d",
+      "authorType": "ai",
+      "messageType": "ai_card_batch",
+      "textContent": "可以，先不用急着定天数或路线。我先按日本下面的几个区域放一些具体地点，大家看到有感觉的直接点或说一句就行。",
+      "visibility": "group",
+      "payload": {
+        "cardNodeIds": [
+          "arashiyama",
+          "fushimi-inari",
+          "gion-higashiyama",
+          "kiyomizu-dera",
+          "asakusa-ueno",
+          "sensoji",
+          "nakamise-dori",
+          "tokyo-skytree",
+          "shibuya-shinjuku",
+          "tokyo-disney",
+          "kamakura",
+          "hakone",
+          "fuji-kawaguchiko",
+          "lake-kawaguchiko",
+          "usj",
+          "dotonbori",
+          "osaka-castle",
+          "nakazakicho",
+          "sapporo-otaru",
+          "furano-biei",
+          "naha-kokusai",
+          "kerama-islands"
+        ]
+      },
+      "createdAt": "2026-08-23T09:00:08.000Z"
+    }
+  ]
+}

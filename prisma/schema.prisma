@@ -1,0 +1,420 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Trip {
+  id                 String   @id
+  name               String
+  inviteCode         String   @unique @map("invite_code")
+  status             String
+  roughDestination   String?  @map("rough_destination")
+  tripDurationDays   Int?     @map("trip_duration_days")
+  roughDateText      String?  @map("rough_date_text")
+  currentFocusNodeId String?  @map("current_focus_node_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  messages                 ChatMessage[]
+  materials                Material[]
+  memberships              TripMember[]
+  evidences                Evidence[]
+  signals                  MemberSignal[]
+  constraints              MemberConstraint[]
+  opinions                 PlaceOpinion[]
+  memberPlaceProfiles      MemberPlaceProfile[]
+  roomPlaceProfiles        RoomPlaceProfile[]
+  planningContextSnapshots PlanningContextSnapshot[]
+  nodeStates               RoomNodeState[]
+
+  @@map("trips")
+}
+
+model Member {
+  id          String   @id
+  displayName String   @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  messages            ChatMessage[]
+  memberships         TripMember[]
+  evidences           Evidence[]
+  signals             MemberSignal[]
+  constraints         MemberConstraint[]
+  opinions            PlaceOpinion[]
+  memberPlaceProfiles MemberPlaceProfile[]
+
+  @@map("members")
+}
+
+model TripMember {
+  tripId     String   @map("trip_id")
+  memberId   String   @map("member_id")
+  role       String
+  joinStatus String   @map("join_status")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  trip   Trip   @relation(fields: [tripId], references: [id])
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@id([tripId, memberId])
+  @@map("trip_members")
+}
+
+model ChatMessage {
+  id             String   @id
+  tripId         String   @map("trip_id")
+  authorType     String   @map("author_type")
+  authorMemberId String?  @map("author_member_id")
+  messageType    String   @map("message_type")
+  textContent    String?  @map("text_content")
+  payload        Json?
+  visibility     String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  trip   Trip    @relation(fields: [tripId], references: [id])
+  member Member? @relation(fields: [authorMemberId], references: [id])
+
+  @@map("chat_messages")
+}
+
+model DestinationNode {
+  id                String   @id
+  provider          String?  @default("seed")
+  providerPlaceId   String?  @map("provider_place_id")
+  canonicalName     String   @map("canonical_name")
+  aliases           Json
+  nodeType          String   @map("node_type")
+  parentId          String?  @map("parent_id")
+  countryCode       String?  @map("country_code")
+  latitude          Float?
+  longitude         Float?
+  shortSummary      String   @map("short_summary")
+  longDescription   String?  @map("long_description")
+  highlights        Json
+  tags              Json
+  suggestedStayText String?  @map("suggested_stay_text")
+  budgetBand        String?  @map("budget_band")
+  heroImageUrl      String?  @map("hero_image_url")
+  images            Json?
+  imageAlt          String   @map("image_alt")
+  dataSource        String?  @map("data_source")
+  dataFreshness     String?  @map("data_freshness")
+  dataAsOf          String?  @map("data_as_of")
+  lastSyncedAt      String?  @map("last_synced_at")
+  popularityScore   Float?   @map("popularity_score")
+  socialDiscovery   Json?    @map("social_discovery")
+  isSeedData        Boolean  @default(true) @map("is_seed_data")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  roomStates          RoomNodeState[]
+  opinions            PlaceOpinion[]
+  memberPlaceProfiles MemberPlaceProfile[]
+  roomPlaceProfiles   RoomPlaceProfile[]
+
+  @@map("destination_nodes")
+}
+
+model Material {
+  id                   String   @id
+  tripId               String   @map("trip_id")
+  createdByType        String   @map("created_by_type")
+  createdByMemberId    String?  @map("created_by_member_id")
+  materialType         String   @map("material_type")
+  sourceType           String   @map("source_type")
+  sourceProvider       String?  @map("source_provider")
+  sourceUrl            String?  @map("source_url")
+  rawText              String?  @map("raw_text")
+  attachmentUrl        String?  @map("attachment_url")
+  title                String
+  summary              String?
+  status               String
+  primaryNodeId        String?  @map("primary_node_id")
+  extractionStatus     String   @map("extraction_status")
+  extractionConfidence Float    @map("extraction_confidence")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  trip Trip @relation(fields: [tripId], references: [id])
+
+  @@map("materials")
+}
+
+model RoomNodeState {
+  tripId            String    @map("trip_id")
+  nodeId            String    @map("node_id")
+  state             String
+  explorationState  String?   @map("exploration_state")
+  engagementScore   Float?    @map("engagement_score")
+  interestScore     Float?    @map("interest_score")
+  disagreementScore Float?    @map("disagreement_score")
+  firstDiscoveredAt DateTime? @map("first_discovered_at")
+  lastInteractedAt  DateTime? @map("last_interacted_at")
+  mentionCount      Int       @default(0) @map("mention_count")
+  interactionCount  Int       @default(0) @map("interaction_count")
+  source            String?
+  shownCount        Int       @default(0) @map("shown_count")
+  lastShownAt       DateTime? @map("last_shown_at")
+  aggregateSignal   Json?     @map("aggregate_signal")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  trip Trip            @relation(fields: [tripId], references: [id])
+  node DestinationNode @relation(fields: [nodeId], references: [id])
+
+  @@id([tripId, nodeId])
+  @@map("room_node_states")
+}
+
+model Evidence {
+  id                   String    @id
+  tripId               String    @map("trip_id")
+  memberId             String?   @map("member_id")
+  targetType           String    @map("target_type")
+  targetId             String?   @map("target_id")
+  evidenceType         String    @map("evidence_type")
+  sourceEntityType     String    @map("source_entity_type")
+  sourceEntityId       String?   @map("source_entity_id")
+  sourceMessageId      String?   @map("source_message_id")
+  sourceMaterialId     String?   @map("source_material_id")
+  sourcePlaceOpinionId String?   @map("source_place_opinion_id")
+  rawTextSnapshot      String?   @map("raw_text_snapshot") @db.Text
+  rawPayload           Json?     @map("raw_payload")
+  metadata             Json?
+  analysisStatus       String    @default("pending") @map("analysis_status")
+  analysisError        String?   @map("analysis_error") @db.Text
+  visibility           String
+  occurredAt           DateTime  @default(now()) @map("occurred_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  deletedAt            DateTime? @map("deleted_at")
+
+  trip    Trip           @relation(fields: [tripId], references: [id])
+  member  Member?        @relation(fields: [memberId], references: [id])
+  signals MemberSignal[]
+
+  @@index([tripId, analysisStatus])
+  @@index([tripId, targetType, targetId])
+  @@index([sourceEntityType, sourceEntityId])
+  @@map("evidences")
+}
+
+model MemberSignal {
+  id                   String    @id
+  tripId               String    @map("trip_id")
+  memberId             String    @map("member_id")
+  evidenceId           String?   @map("evidence_id")
+  targetType           String    @map("target_type")
+  targetId             String    @map("target_id")
+  signalType           String    @map("signal_type")
+  polarity             Int
+  intensity            Int
+  reason               String?   @db.Text
+  aspect               String?
+  intent               String?
+  conditionText        String?   @map("condition_text") @db.Text
+  constraintCandidate  Boolean   @default(false) @map("constraint_candidate")
+  extractedAttributes  Json?     @map("extracted_attributes")
+  sourceMessageId      String?   @map("source_message_id")
+  sourceMaterialId     String?   @map("source_material_id")
+  sourcePlaceOpinionId String?   @map("source_place_opinion_id")
+  visibility           String
+  scope                String
+  createdBy            String    @default("user_action") @map("created_by")
+  modelName            String?   @map("model_name")
+  modelVersion         String?   @map("model_version")
+  extractionRunId      String?   @map("extraction_run_id")
+  invalidatedAt        DateTime? @map("invalidated_at")
+  confidence           Float
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  trip     Trip      @relation(fields: [tripId], references: [id])
+  member   Member    @relation(fields: [memberId], references: [id])
+  evidence Evidence? @relation(fields: [evidenceId], references: [id])
+
+  @@index([evidenceId])
+  @@index([tripId, memberId, targetType, targetId])
+  @@index([tripId, targetType, targetId])
+  @@map("member_signals")
+}
+
+model PlaceOpinion {
+  id               String   @id
+  tripId           String   @map("trip_id")
+  nodeId           String   @map("node_id")
+  memberId         String   @map("member_id")
+  sourceType       String   @map("source_type")
+  sourceMessageId  String?  @map("source_message_id")
+  sourceEvidenceId String?  @map("source_evidence_id")
+  content          String   @db.Text
+  reaction         String
+  visibility       String
+  signalType       String   @map("signal_type")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  trip   Trip            @relation(fields: [tripId], references: [id])
+  member Member          @relation(fields: [memberId], references: [id])
+  node   DestinationNode @relation(fields: [nodeId], references: [id])
+
+  @@index([tripId, nodeId])
+  @@index([tripId, memberId, nodeId])
+  @@map("place_opinions")
+}
+
+model MemberConstraint {
+  id              String    @id
+  tripId          String    @map("trip_id")
+  memberId        String?   @map("member_id")
+  targetType      String?   @map("target_type")
+  targetId        String?   @map("target_id")
+  sourceKind      String    @map("source_kind")
+  constraintType  String    @map("constraint_type")
+  severity        String
+  polarity        Int?
+  priorityScore   Float?    @map("priority_score")
+  confidence      Float?
+  summary         String    @db.Text
+  conditionText   String?   @map("condition_text") @db.Text
+  structuredValue Json?     @map("structured_value")
+  evidenceIds     Json?     @map("evidence_ids")
+  signalIds       Json?     @map("signal_ids")
+  status          String    @default("active")
+  modelName       String?   @map("model_name")
+  modelVersion    String?   @map("model_version")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  invalidatedAt   DateTime? @map("invalidated_at")
+
+  trip   Trip    @relation(fields: [tripId], references: [id])
+  member Member? @relation(fields: [memberId], references: [id])
+
+  @@index([tripId, memberId, status])
+  @@index([tripId, targetType, targetId])
+  @@map("member_constraints")
+}
+
+model MemberPlaceProfile {
+  id                 String    @id
+  tripId             String    @map("trip_id")
+  memberId           String    @map("member_id")
+  nodeId             String    @map("node_id")
+  interestScore      Float     @map("interest_score")
+  positiveScore      Float?    @map("positive_score")
+  negativeScore      Float?    @map("negative_score")
+  confidenceScore    Float     @map("confidence_score")
+  stance             String
+  summary            String    @db.Text
+  positiveReasons    Json      @map("positive_reasons")
+  negativeReasons    Json      @map("negative_reasons")
+  conditionText      String?   @map("condition_text") @db.Text
+  constraintSummary  String?   @map("constraint_summary") @db.Text
+  mustGo             Boolean   @default(false) @map("must_go")
+  hardReject         Boolean   @default(false) @map("hard_reject")
+  evidenceCount      Int       @default(0) @map("evidence_count")
+  signalCount        Int       @default(0) @map("signal_count")
+  constraintIds      Json?     @map("constraint_ids")
+  topSignalIds       Json      @map("top_signal_ids")
+  sourceEvidenceIds  Json      @map("source_evidence_ids")
+  lastSignalAt       DateTime? @map("last_signal_at")
+  aggregationVersion String    @map("aggregation_version")
+  lastCalculatedAt   DateTime  @default(now()) @map("last_calculated_at")
+  staleAt            DateTime? @map("stale_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  trip   Trip            @relation(fields: [tripId], references: [id])
+  member Member          @relation(fields: [memberId], references: [id])
+  node   DestinationNode @relation(fields: [nodeId], references: [id])
+
+  @@unique([tripId, memberId, nodeId])
+  @@index([tripId, nodeId])
+  @@map("member_place_profiles")
+}
+
+model RoomPlaceProfile {
+  id                    String    @id
+  tripId                String    @map("trip_id")
+  nodeId                String    @map("node_id")
+  teamInterestScore     Float     @map("team_interest_score")
+  engagementScore       Float     @map("engagement_score")
+  disagreementScore     Float     @map("disagreement_score")
+  memberStances         Json      @map("member_stances")
+  summary               String    @db.Text
+  commonPositiveReasons Json      @map("common_positive_reasons")
+  mainConcerns          Json      @map("main_concerns")
+  conditionalFitNotes   Json?     @map("conditional_fit_notes")
+  unresolvedQuestions   Json?     @map("unresolved_questions")
+  mustGoMemberIds       Json?     @map("must_go_member_ids")
+  hardRejectMemberIds   Json?     @map("hard_reject_member_ids")
+  memberProfileIds      Json      @map("member_profile_ids")
+  sourceEvidenceIds     Json      @map("source_evidence_ids")
+  topSignalIds          Json      @map("top_signal_ids")
+  constraintIds         Json?     @map("constraint_ids")
+  aggregationVersion    String    @map("aggregation_version")
+  lastCalculatedAt      DateTime  @default(now()) @map("last_calculated_at")
+  staleAt               DateTime? @map("stale_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  trip Trip            @relation(fields: [tripId], references: [id])
+  node DestinationNode @relation(fields: [nodeId], references: [id])
+
+  @@unique([tripId, nodeId])
+  @@map("room_place_profiles")
+}
+
+model PlanningContextSnapshot {
+  id                           String   @id
+  tripId                       String   @map("trip_id")
+  createdByMemberId            String?  @map("created_by_member_id")
+  triggerType                  String   @map("trigger_type")
+  tripSnapshot                 Json     @map("trip_snapshot")
+  membersSnapshot              Json     @map("members_snapshot")
+  destinationNodesSnapshot     Json     @map("destination_nodes_snapshot")
+  destinationRelationsSnapshot Json     @map("destination_relations_snapshot")
+  roomPlaceProfilesSnapshot    Json     @map("room_place_profiles_snapshot")
+  memberPlaceProfilesSnapshot  Json     @map("member_place_profiles_snapshot")
+  constraintsSnapshot          Json     @map("constraints_snapshot")
+  keyEvidenceRefs              Json     @map("key_evidence_refs")
+  keySignalRefs                Json     @map("key_signal_refs")
+  providerContextSnapshot      Json?    @map("provider_context_snapshot")
+  modelName                    String?  @map("model_name")
+  modelVersion                 String?  @map("model_version")
+  createdAt                    DateTime @default(now()) @map("created_at")
+
+  trip Trip @relation(fields: [tripId], references: [id])
+
+  @@index([tripId, createdAt])
+  @@map("planning_context_snapshots")
+}
+
+model PlanVariant {
+  id                  String   @id
+  tripId              String   @map("trip_id")
+  version             Int
+  title               String
+  summary             String
+  status              String
+  totalDays           Int?     @map("total_days")
+  segments            Json
+  includedNodeIds     Json     @map("included_node_ids")
+  excludedHighlights  Json     @map("excluded_highlights")
+  mobilityText        String   @map("mobility_text")
+  budgetText          String   @map("budget_text")
+  budgetIsEstimate    Boolean  @map("budget_is_estimate")
+  gains               Json
+  tradeoffs           Json
+  basedOnSignalIds    Json     @map("based_on_signal_ids")
+  unresolvedQuestions Json     @map("unresolved_questions")
+  parentPlanId        String?  @map("parent_plan_id")
+  changeSummary       Json?    @map("change_summary")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@map("plan_variants")
+}
