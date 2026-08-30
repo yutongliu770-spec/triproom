@@ -382,4 +382,4 @@ npm run db:seed
 npm run seed:demo
 ```
 
-`db:seed` 会保证 Fresh Demo 和 Quick Demo 都存在；`seed:demo` 会先清理这两个固定 Demo Room，再按 seed facts 和确定性派生结果重建，并输出 `clearing trip / creating trip / creating members / creating places / creating evidence / deriving signals / generating member profiles / generating room profiles` 等进度日志。`db:migrate` 需要可用的 PostgreSQL 和 `DATABASE_URL`。当前没有数据库时，`/demo` 仍会回落到 seed/localStorage 状态运行；但真实偏好链、Profile 持久化、确定性 reset 和数据库端到端测试需要 PostgreSQL。
+`postinstall` 会执行 `prisma generate`，保证 Vercel / clean install 后 Prisma Client 与 schema 同步。`db:seed` 会保证 Fresh Demo 和 Quick Demo 都存在；`seed:demo` 会先清理这两个固定 Demo Room，再按 seed facts 和确定性派生结果重建，并输出 `clearing trip / creating trip / creating members / creating places / creating evidence / deriving signals / generating member profiles / generating room profiles` 等进度日志。`db:migrate` 需要可用的 PostgreSQL 和 `DATABASE_URL`。当前没有数据库时，`/demo` 仍会回落到 seed/localStorage 状态运行；但真实偏好链、Profile 持久化、确定性 reset 和数据库端到端测试需要 PostgreSQL。
