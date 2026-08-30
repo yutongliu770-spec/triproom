@@ -5,6 +5,7 @@ import {
   serializeEvidence,
   serializeMemberPlaceProfile,
   serializePlaceOpinion,
+  serializePlanVariant,
   serializeRoomNodeState,
   serializeRoomPlaceProfile,
   serializeSignal
@@ -62,7 +63,7 @@ export async function getPreferenceState(tripId: string) {
 }
 
 export async function getPersistedRoomActivity(tripId: string) {
-  const [messages, materials, preferenceState] = await Promise.all([
+  const [messages, materials, plans, preferenceState] = await Promise.all([
     prisma.chatMessage.findMany({
       where: { tripId },
       orderBy: { createdAt: "asc" }
@@ -70,6 +71,10 @@ export async function getPersistedRoomActivity(tripId: string) {
     prisma.material.findMany({
       where: { tripId },
       orderBy: { createdAt: "desc" }
+    }),
+    prisma.planVariant.findMany({
+      where: { tripId },
+      orderBy: [{ createdAt: "asc" }, { title: "asc" }]
     }),
     getPreferenceState(tripId)
   ]);
@@ -108,6 +113,7 @@ export async function getPersistedRoomActivity(tripId: string) {
       extractionConfidence: material.extractionConfidence,
       createdAt: material.createdAt.toISOString()
     })),
+    plans: plans.map(serializePlanVariant),
     ...preferenceState
   };
 }

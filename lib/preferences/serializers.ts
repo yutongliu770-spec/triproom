@@ -4,6 +4,7 @@ import type {
   MemberPlaceProfile,
   MemberSignal,
   PlaceOpinion,
+  PlanVariant,
   ReactionType,
   RoomNodeState,
   RoomPlaceProfile
@@ -349,6 +350,68 @@ export function serializeRoomNodeState(record: {
   };
 }
 
+export function serializePlanVariant(record: {
+  id: string;
+  tripId: string;
+  planningContextSnapshotId: string | null;
+  version: number;
+  title: string;
+  summary: string;
+  status: string;
+  totalDays: number | null;
+  segments: unknown;
+  score: number | null;
+  scoringBreakdown: unknown;
+  validation: unknown;
+  itinerary: unknown;
+  route: unknown;
+  includedNodeIds: unknown;
+  excludedHighlights: unknown;
+  mobilityText: string;
+  budgetText: string;
+  budgetIsEstimate: boolean;
+  gains: unknown;
+  tradeoffs: unknown;
+  basedOnSignalIds: unknown;
+  unresolvedQuestions: unknown;
+  parentPlanId: string | null;
+  changeSummary: unknown;
+  modelName: string | null;
+  modelVersion: string | null;
+  createdAt: Date;
+}): PlanVariant {
+  return {
+    id: record.id,
+    tripId: record.tripId,
+    planningContextSnapshotId: record.planningContextSnapshotId ?? undefined,
+    version: record.version,
+    title: record.title,
+    summary: record.summary,
+    status: planStatus(record.status),
+    totalDays: record.totalDays ?? undefined,
+    segments: planSegments(record.segments),
+    score: record.score ?? undefined,
+    scoringBreakdown: scoringBreakdown(record.scoringBreakdown),
+    validation: planValidation(record.validation),
+    itinerary: planItinerary(record.itinerary),
+    route: planRoute(record.route),
+    includedNodeIds: stringArray(record.includedNodeIds),
+    excludedHighlights: stringArray(record.excludedHighlights),
+    mobilityText: record.mobilityText,
+    budgetText: record.budgetText,
+    budgetIsEstimate: record.budgetIsEstimate,
+    gains: stringArray(record.gains),
+    tradeoffs: stringArray(record.tradeoffs),
+    basedOnSignalIds: stringArray(record.basedOnSignalIds),
+    unresolvedQuestions: stringArray(record.unresolvedQuestions),
+    parentPlanId: record.parentPlanId ?? undefined,
+    changeSummary: stringArray(record.changeSummary),
+    modelName: record.modelName ?? undefined,
+    modelVersion: record.modelVersion ?? undefined,
+    createdAt: record.createdAt.toISOString()
+  };
+}
+
 function targetType(value: string): "trip" | "node" | "material" | "plan" | "search" {
   if (value === "node" || value === "material" || value === "plan" || value === "search") return value;
   return "trip";
@@ -436,6 +499,94 @@ function aggregateSignal(value: unknown): NonNullable<RoomNodeState["aggregateSi
     interestedMembers: numberValue(record.interestedMembers),
     comments: numberValue(record.comments)
   };
+}
+
+function planStatus(value: string): PlanVariant["status"] {
+  if (value === "active" || value === "superseded" || value === "selected") return value;
+  return "draft";
+}
+
+function planSegments(value: unknown): PlanVariant["segments"] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item) => ({
+      nodeId: typeof item.nodeId === "string" ? item.nodeId : "",
+      name: typeof item.name === "string" ? item.name : "",
+      days: typeof item.days === "number" ? item.days : 1,
+      representativeNodeIds: stringArray(item.representativeNodeIds),
+      experienceSummary: typeof item.experienceSummary === "string" ? item.experienceSummary : "",
+      stayArea: typeof item.stayArea === "string" ? item.stayArea : undefined
+    }))
+    .filter((segment) => segment.nodeId && segment.name);
+}
+
+function scoringBreakdown(value: unknown): PlanVariant["scoringBreakdown"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  return {
+    memberPreferenceFit: numberField(record.memberPreferenceFit),
+    groupFairness: numberField(record.groupFairness),
+    routeFeasibility: numberField(record.routeFeasibility),
+    schedulePace: numberField(record.schedulePace),
+    budgetFit: numberField(record.budgetFit),
+    dataConfidence: numberField(record.dataConfidence)
+  };
+}
+
+function planValidation(value: unknown): PlanVariant["validation"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  return {
+    passed: record.passed === true,
+    issues: Array.isArray(record.issues)
+      ? record.issues
+          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+          .map((item) => {
+            const severity: "error" | "warning" | "info" =
+              item.severity === "error" || item.severity === "warning" ? item.severity : "info";
+            return {
+              severity,
+              code: typeof item.code === "string" ? item.code : "info",
+              message: typeof item.message === "string" ? item.message : ""
+            };
+          })
+          .filter((item) => item.message)
+      : []
+  };
+}
+
+function planItinerary(value: unknown): PlanVariant["itinerary"] {
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+    .map((item, index) => ({
+      day: typeof item.day === "number" ? item.day : index + 1,
+      city: typeof item.city === "string" ? item.city : "",
+      area: typeof item.area === "string" ? item.area : undefined,
+      morning: typeof item.morning === "string" ? item.morning : "",
+      afternoon: typeof item.afternoon === "string" ? item.afternoon : "",
+      evening: typeof item.evening === "string" ? item.evening : "",
+      stayArea: typeof item.stayArea === "string" ? item.stayArea : "",
+      placeNodeIds: stringArray(item.placeNodeIds),
+      transport: typeof item.transport === "string" ? item.transport : "",
+      costText: typeof item.costText === "string" ? item.costText : "",
+      imageNodeId: typeof item.imageNodeId === "string" ? item.imageNodeId : undefined
+    }))
+    .filter((day) => day.city && day.morning && day.afternoon);
+}
+
+function planRoute(value: unknown): PlanVariant["route"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  return {
+    nodeIds: stringArray(record.nodeIds),
+    summary: typeof record.summary === "string" ? record.summary : ""
+  };
+}
+
+function numberField(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function numberValue(value: unknown) {

@@ -1,24 +1,16 @@
-import { CalendarDays, MapPin } from "lucide-react";
-import type { ChatMessage, DestinationNode, MemberSignal, PlanVariant, TravelCard, Trip } from "@/lib/types";
+import { CalendarDays } from "lucide-react";
+import type { ChatMessage, PlanVariant, Trip } from "@/lib/types";
 import { Avatar } from "@/components/ui/Avatar";
 
 export function ChatTimeline({
   trip,
   messages,
-  nodes,
-  cardsByNodeId,
   plans,
-  signals,
-  onOpenPlace,
   onOpenPlanning
 }: {
   trip: Trip;
   messages: ChatMessage[];
-  nodes: DestinationNode[];
-  cardsByNodeId: Record<string, TravelCard>;
   plans: PlanVariant[];
-  signals: MemberSignal[];
-  onOpenPlace: (nodeId: string) => void;
   onOpenPlanning: () => void;
 }) {
   return (
@@ -27,16 +19,6 @@ export function ChatTimeline({
         {messages
           .filter((message) => message.visibility === "group")
           .map((message) => {
-            const cardNodeIds = Array.isArray(message.payload?.cardNodeIds)
-              ? message.payload.cardNodeIds.filter((nodeId): nodeId is string => typeof nodeId === "string")
-              : [];
-            const payloadNodeId =
-              typeof message.payload?.nodeId === "string"
-                ? message.payload.nodeId
-                : typeof message.payload?.primaryNodeId === "string"
-                  ? message.payload.primaryNodeId
-                  : undefined;
-            const placeNodeIds = Array.from(new Set([...cardNodeIds, ...(payloadNodeId ? [payloadNodeId] : [])]));
             const referencedPlans = Array.isArray(message.payload?.planIds)
               ? message.payload.planIds
                   .filter((planId): planId is string => typeof planId === "string")
@@ -47,15 +29,6 @@ export function ChatTimeline({
             return (
               <div key={message.id} className="space-y-3">
                 <MessageBubble trip={trip} message={message} />
-                {placeNodeIds.length > 0 && (
-                  <PlaceReferenceRow
-                    nodeIds={placeNodeIds}
-                    nodes={nodes}
-                    cardsByNodeId={cardsByNodeId}
-                    signals={signals}
-                    onOpenPlace={onOpenPlace}
-                  />
-                )}
                 {referencedPlans.length > 0 && (
                   <PlanReferenceRow plans={referencedPlans} onOpenPlanning={onOpenPlanning} />
                 )}
@@ -102,44 +75,6 @@ function MessageBubble({ trip, message }: { trip: Trip; message: ChatMessage }) 
   );
 }
 
-function PlaceReferenceRow({
-  nodeIds,
-  nodes,
-  cardsByNodeId,
-  signals,
-  onOpenPlace
-}: {
-  nodeIds: string[];
-  nodes: DestinationNode[];
-  cardsByNodeId: Record<string, TravelCard>;
-  signals: MemberSignal[];
-  onOpenPlace: (nodeId: string) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2 pl-12">
-      {nodeIds.map((nodeId) => {
-        const node = nodes.find((item) => item.id === nodeId);
-        const card = cardsByNodeId[nodeId];
-        const label = node?.canonicalName ?? card?.title ?? nodeId;
-        const summary = summarizePlaceSignals(signals, nodeId);
-
-        return (
-          <button
-            key={nodeId}
-            type="button"
-            className="focus-ring inline-flex max-w-full items-center gap-2 rounded-full border border-ink/10 bg-white px-3 py-2 text-left text-xs font-semibold text-ink/70 shadow-[0_6px_16px_rgba(23,33,31,0.06)]"
-            onClick={() => onOpenPlace(nodeId)}
-          >
-            <MapPin size={13} className="shrink-0 text-coral" aria-hidden="true" />
-            <span className="truncate">{label}</span>
-            {summary && <span className="shrink-0 text-ink/40">· {summary}</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function PlanReferenceRow({
   plans,
   onOpenPlanning
@@ -162,21 +97,4 @@ function PlanReferenceRow({
       ))}
     </div>
   );
-}
-
-function summarizePlaceSignals(signals: MemberSignal[], nodeId: string) {
-  const nodeSignals = signals.filter((signal) => signal.targetType === "node" && signal.targetId === nodeId);
-  const positiveMembers = new Set(
-    nodeSignals
-      .filter((signal) => signal.polarity > 0 || signal.signalType === "want_to_know")
-      .map((signal) => signal.memberId)
-  );
-  const negativeMembers = new Set(
-    nodeSignals.filter((signal) => signal.polarity < 0).map((signal) => signal.memberId)
-  );
-
-  if (positiveMembers.size > 0 && negativeMembers.size > 0) return "有分歧";
-  if (positiveMembers.size > 0) return `${positiveMembers.size} 人感兴趣`;
-  if (negativeMembers.size > 0) return `${negativeMembers.size} 人有顾虑`;
-  return "";
 }

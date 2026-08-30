@@ -56,6 +56,9 @@ export function PlaceWorkspace({
   memberPlaceStates,
   roomNodeStates,
   plans,
+  selectedPlanId,
+  planningStatus,
+  planningError,
   onModeChange,
   onActiveCardIndexChange,
   onSearchQueryChange,
@@ -71,6 +74,7 @@ export function PlaceWorkspace({
   onExploreSubmit,
   onGeneratePlans,
   onPlanComment,
+  onPlanSelect,
   onPlanRevise
 }: {
   mode: PlaceWorkspaceMode;
@@ -90,6 +94,9 @@ export function PlaceWorkspace({
   memberPlaceStates: MemberPlaceState[];
   roomNodeStates: RoomNodeState[];
   plans: PlanVariant[];
+  selectedPlanId?: string;
+  planningStatus?: "idle" | "generating" | "revising";
+  planningError?: string;
   onModeChange: (mode: PlaceWorkspaceMode) => void;
   onActiveCardIndexChange: (index: number) => void;
   onSearchQueryChange: (query: string) => void;
@@ -110,7 +117,8 @@ export function PlaceWorkspace({
   onExploreSubmit: (text: string, shareToGroup: boolean) => void;
   onGeneratePlans: () => void;
   onPlanComment: (plan: PlanVariant, text: string) => void;
-  onPlanRevise: (plan: PlanVariant) => void;
+  onPlanSelect: (planId: string) => void;
+  onPlanRevise: (plan: PlanVariant, instruction: string) => void;
 }) {
   const selectedNode = selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) : undefined;
   const [discoveredViewState, setDiscoveredViewState] = useState<DiscoveredViewState>({
@@ -204,9 +212,13 @@ export function PlaceWorkspace({
         ) : (
           <PlanPanel
             plans={plans}
+            selectedPlanId={selectedPlanId}
+            status={planningStatus}
+            error={planningError}
             onOpenPlace={onOpenPlace}
             onGeneratePlans={onGeneratePlans}
             onPlanComment={onPlanComment}
+            onPlanSelect={onPlanSelect}
             onPlanRevise={onPlanRevise}
           />
         )}

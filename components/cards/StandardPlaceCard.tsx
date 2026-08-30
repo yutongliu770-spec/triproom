@@ -231,7 +231,7 @@ export function StandardPlaceCard({
 
       {commentPanelOpen && (
         <div
-          className="comment-sheet-enter absolute inset-x-0 bottom-0 z-20 h-[68%] translate-y-0 rounded-t-[28px] border-t border-ink/10 bg-paper shadow-[0_-18px_40px_rgba(23,33,31,0.16)]"
+          className="comment-sheet-enter absolute inset-x-0 bottom-0 z-20 h-[70%] translate-y-0 rounded-t-[22px] border-t border-ink/10 bg-white shadow-[0_-18px_40px_rgba(23,33,31,0.16)]"
           aria-label={`${card.title}评论区`}
           onPointerDown={(event) => event.stopPropagation()}
         >
@@ -427,85 +427,89 @@ function CommentPanel({
   });
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-t-[28px] bg-paper">
-      <div className="shrink-0 border-b border-ink/10 bg-white/85 px-4 py-2 backdrop-blur">
-        <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-ink/15" aria-hidden="true" />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-t-[22px] bg-white">
+      <div className="shrink-0 border-b border-ink/10 bg-white px-3.5 pb-2 pt-1.5">
+        <div className="mx-auto mb-1.5 h-1 w-9 rounded-full bg-ink/15" aria-hidden="true" />
         <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h4 className="truncate text-base font-semibold text-ink">评论区</h4>
-            <p className="text-xs font-medium text-ink/45">{card.title}</p>
+          <div className="min-w-0 flex-1 text-center">
+            <h4 className="truncate text-[15px] font-semibold leading-5 text-ink">评论区</h4>
+            <p className="truncate text-[11px] font-medium leading-4 text-ink/40">{card.title}</p>
           </div>
           <button
             type="button"
-            className="focus-ring grid size-8 shrink-0 place-items-center rounded-full bg-cloud text-ink/65"
+            className="focus-ring grid size-7 shrink-0 place-items-center rounded-full bg-cloud text-ink/60"
             aria-label={`收起${card.title}观点`}
             onClick={onClose}
           >
-            <X size={15} aria-hidden="true" />
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3.5 py-2.5">
         <section aria-label="感兴趣程度">
-          <h5 className="text-sm font-semibold text-ink">感兴趣程度</h5>
-          <div className="mt-2 rounded-[18px] bg-white px-3 py-2.5">
-            <div className="text-sm font-semibold text-ink">{interestLabel}</div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-cloud">
-              <div
-                className="h-full rounded-full bg-coral"
-                style={{ width: `${interestPercentFromText(interestLabel)}%` }}
-              />
+          <div className="flex items-center justify-between gap-3">
+            <h5 className="text-[13px] font-semibold leading-5 text-ink">感兴趣程度</h5>
+            <span className="truncate text-[11px] font-medium leading-4 text-ink/45">讨论度：{engagementText}</span>
+          </div>
+          <div className="mt-1.5 rounded-2xl bg-paper px-3 py-2">
+            <div className="flex items-center gap-3">
+              <div className="shrink-0 text-xs font-semibold text-ink">{interestLabel}</div>
+              <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-cloud">
+                <div
+                  className="h-full rounded-full bg-coral"
+                  style={{ width: `${interestPercentFromText(interestLabel)}%` }}
+                />
+              </div>
             </div>
           </div>
-          <p className="mt-2 text-sm font-medium text-ink/60">讨论度：{engagementText}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {reactions.slice(0, 3).map((reaction) => (
               <button
                 key={reaction.type}
                 type="button"
-                className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-ink/10 bg-white px-2.5 py-1.5 text-xs font-semibold text-ink hover:border-coral/40"
+                className="focus-ring inline-flex items-center gap-1 rounded-full border border-ink/10 bg-white px-2.5 py-1 text-[11px] font-semibold leading-4 text-ink hover:border-coral/40"
                 onClick={() => onReact(reaction.type)}
               >
-                <reaction.Icon size={14} className="text-coral" aria-hidden="true" />
+                <reaction.Icon size={13} className="text-coral" aria-hidden="true" />
                 {reaction.label}
               </button>
             ))}
           </div>
         </section>
 
-        <section className="mt-4" aria-label="成员态度评论">
-          <div className="space-y-4">
+        <section className="mt-3" aria-label="成员态度评论">
+          <div className="space-y-2.5">
             {discussionItems.map((item) => (
               <PlaceCommentRow key={item.id} item={item} />
             ))}
           </div>
-          <div className="mt-3 rounded-2xl border border-ink/10 bg-white p-3">
+          <div className="mt-3 rounded-2xl border border-ink/10 bg-paper p-2">
             <div className="flex gap-2">
               <input
                 value={comment}
                 onChange={(event) => onCommentChange(event.target.value)}
                 placeholder={`说一句对${card.title}的感受`}
-                className="focus-ring min-w-0 flex-1 rounded-full border border-ink/10 bg-paper px-3 py-2 text-xs text-ink placeholder:text-ink/35"
+                className="focus-ring min-w-0 flex-1 rounded-full border border-ink/10 bg-white px-3 py-1.5 text-xs leading-5 text-ink placeholder:text-ink/35"
               />
               <button
                 type="button"
-                className="focus-ring grid size-9 place-items-center rounded-full bg-cloud text-ink/70"
+                className="focus-ring grid size-8 place-items-center rounded-full bg-cloud text-ink/70"
                 aria-label="填入语音转写示例"
                 onClick={onVoiceDraft}
               >
-                <Mic size={15} aria-hidden="true" />
+                <Mic size={14} aria-hidden="true" />
               </button>
               <button
                 type="button"
-                className="focus-ring grid size-9 place-items-center rounded-full bg-pine text-paper"
+                className="focus-ring grid size-8 place-items-center rounded-full bg-pine text-paper"
                 aria-label="发送评论"
                 onClick={onSubmitComment}
               >
-                <MessageCircle size={15} aria-hidden="true" />
+                <MessageCircle size={14} aria-hidden="true" />
               </button>
             </div>
-            <label className="mt-2 flex items-center gap-2 text-xs text-ink/55">
+            <label className="mt-1.5 flex items-center gap-1.5 text-[11px] leading-4 text-ink/50">
               <input
                 type="checkbox"
                 checked={privateComment}
@@ -516,14 +520,14 @@ function CommentPanel({
           </div>
         </section>
 
-        <section className="mt-4 border-t border-ink/10 pb-4 pt-3" aria-label="小红书或抖音链接">
+        <section className="mt-3 border-t border-ink/10 pb-3 pt-2.5" aria-label="小红书或抖音链接">
           <div className="flex items-center justify-between gap-2">
-            <h5 className="text-sm font-semibold text-ink">相关链接</h5>
-            <span className="text-[11px] font-semibold text-ink/40">{externalItems.length} 个来源</span>
+            <h5 className="text-[13px] font-semibold leading-5 text-ink">相关链接</h5>
+            <span className="text-[11px] font-semibold leading-4 text-ink/40">{externalItems.length} 个来源</span>
           </div>
           <div className="mt-2 space-y-2">
             {externalItems.length === 0 ? (
-              <div className="rounded-2xl bg-white p-3 text-sm text-ink/45">
+              <div className="rounded-2xl bg-paper p-2.5 text-xs leading-5 text-ink/45">
                 暂时没有外部链接。小红书入口会使用真实搜索页，抖音只展示成员主动分享的 URL。
               </div>
             ) : (
@@ -686,25 +690,25 @@ function buildPlaceActivityItems({
 
 function PlaceCommentRow({ item }: { item: PlaceDiscussionItem }) {
   return (
-    <div className="flex gap-3">
-      <Avatar member={item.member} className="mt-0.5 size-9 shrink-0 text-[11px]" />
-      <div className="min-w-0 flex-1 border-b border-ink/10 pb-3">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-ink/75">{item.member.displayName}</span>
-          <span className="shrink-0 text-[11px] font-medium text-ink/35">
+    <div className="flex gap-2.5">
+      <Avatar member={item.member} className="mt-0.5 size-8 shrink-0 text-[10px]" />
+      <div className="min-w-0 flex-1 border-b border-ink/10 pb-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-xs font-semibold leading-4 text-ink/60">{item.member.displayName}</span>
+          <span className="shrink-0 text-[10px] font-medium leading-4 text-ink/30">
             {item.isMock ? item.sourceLabel : "刚刚"}
           </span>
         </div>
-        <div className="mt-1 text-sm leading-6 text-ink/78">
-          <span className="mr-2 inline-flex rounded-full bg-coral/10 px-2 py-0.5 text-xs font-semibold text-coral">
+        <div className="mt-0.5 text-[13px] leading-5 text-ink/78">
+          <span className="mr-1.5 inline-flex rounded-full bg-coral/10 px-1.5 py-0.5 text-[10px] font-semibold leading-3 text-coral">
             {item.attitudeLabel}
           </span>
-          {item.isVoice && <Mic size={14} className="mr-1 inline text-coral" aria-hidden="true" />}
+          {item.isVoice && <Mic size={12} className="mr-1 inline text-coral" aria-hidden="true" />}
           {item.content}
         </div>
         <button
           type="button"
-          className="focus-ring mt-1 text-xs font-medium text-ink/35 hover:text-ink/60"
+          className="focus-ring mt-0.5 text-[11px] font-medium leading-4 text-ink/35 hover:text-ink/60"
           aria-label={`回复${item.member.displayName}`}
         >
           回复
@@ -717,28 +721,28 @@ function PlaceCommentRow({ item }: { item: PlaceDiscussionItem }) {
 function PlaceActivityCard({ item }: { item: PlaceActivityItem }) {
   if (item.type === "opinion") {
     return (
-      <div className="rounded-2xl bg-white p-3 text-sm leading-6 text-ink/70">
-        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-ink/45">
+      <div className="rounded-2xl bg-paper p-2.5 text-xs leading-5 text-ink/70">
+        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold leading-4 text-ink/45">
           {item.member && <Avatar member={item.member} className="size-5 text-[9px]" />}
           <span>{item.member?.displayName ?? "成员"}</span>
           <span>{item.sourceLabel}</span>
         </div>
-        {item.isVoice && <Mic size={14} className="mr-1 inline text-coral" aria-hidden="true" />}
+        {item.isVoice && <Mic size={12} className="mr-1 inline text-coral" aria-hidden="true" />}
         {item.content}
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl bg-white p-3 text-sm leading-6 text-ink/70">
-      <div className="flex items-center gap-2 text-xs font-semibold text-ink/45">
+    <div className="rounded-2xl bg-paper p-2.5 text-xs leading-5 text-ink/70">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold leading-4 text-ink/45">
         {item.member && <Avatar member={item.member} className="size-5 text-[9px]" />}
         <span>{item.member ? `${item.member.displayName} 分享了` : "外部入口"}</span>
         <span>{item.sourceLabel}</span>
       </div>
-      <div className="mt-1 font-semibold text-ink">{item.title}</div>
+      <div className="mt-1 font-semibold leading-5 text-ink">{item.title}</div>
       {item.imageUrl && (
-        <span className="relative mt-2 block h-20 overflow-hidden rounded-xl bg-cloud">
+        <span className="relative mt-1.5 block h-16 overflow-hidden rounded-xl bg-cloud">
           <Image src={item.imageUrl} alt="" fill sizes="260px" className="object-cover" />
         </span>
       )}
@@ -748,7 +752,7 @@ function PlaceActivityCard({ item }: { item: PlaceActivityItem }) {
           href={item.sourceUrl}
           target="_blank"
           rel="noreferrer"
-          className="focus-ring mt-2 inline-flex items-center gap-1 rounded-full bg-paper px-3 py-1.5 text-xs font-semibold text-ink/70"
+          className="focus-ring mt-1.5 inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold leading-4 text-ink/70"
         >
           打开原文
           <ExternalLink size={12} aria-hidden="true" />

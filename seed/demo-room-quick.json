@@ -1,0 +1,286 @@
+{
+  "trip": {
+    "id": "demo-japan-quick",
+    "name": "日本旅行探索 · Quick Demo",
+    "inviteCode": "JPNFAST",
+    "roughDestination": "日本",
+    "tripDurationDays": 7,
+    "roughDateText": "春秋档期，日期未最终确认",
+    "currentFocusNodeId": "japan",
+    "members": [
+      { "id": "m-anna", "displayName": "安安", "avatarUrl": "安", "role": "organizer" },
+      { "id": "m-bo", "displayName": "博文", "avatarUrl": "博", "role": "member" },
+      { "id": "m-chen", "displayName": "晨晨", "avatarUrl": "晨", "role": "member" },
+      { "id": "m-ding", "displayName": "丁丁", "avatarUrl": "丁", "role": "member" }
+    ]
+  },
+  "initialActiveMemberIds": ["m-anna", "m-bo", "m-chen", "m-ding"],
+  "initialCardIds": [
+    "kamakura",
+    "hakone",
+    "asakusa-ueno",
+    "shibuya-shinjuku",
+    "tokyo-disney",
+    "usj",
+    "dotonbori",
+    "gion-higashiyama",
+    "fushimi-inari",
+    "arashiyama",
+    "fuji-kawaguchiko",
+    "lake-kawaguchiko",
+    "osaka-castle"
+  ],
+  "exploredNodeIds": [
+    "tokyo",
+    "kyoto",
+    "osaka",
+    "kamakura",
+    "hakone",
+    "usj",
+    "dotonbori",
+    "gion-higashiyama",
+    "fushimi-inari",
+    "asakusa-ueno",
+    "fuji-kawaguchiko"
+  ],
+  "messages": [
+    {
+      "id": "msg-quick-1",
+      "tripId": "demo-japan-quick",
+      "authorType": "member",
+      "authorMemberId": "m-anna",
+      "messageType": "user_text",
+      "textContent": "我们想去日本旅游，大概一周，但还没决定东京还是关西。",
+      "visibility": "group",
+      "createdAt": "2026-08-23T09:00:00.000Z"
+    },
+    {
+      "id": "msg-quick-2",
+      "tripId": "demo-japan-quick",
+      "authorType": "ai",
+      "messageType": "ai_card_batch",
+      "textContent": "我先把已经有讨论的东京周边、关西和富士山方向放到探索区。你们可以继续点态度、评论或分享素材。",
+      "visibility": "group",
+      "payload": {
+        "cardNodeIds": [
+          "kamakura",
+          "hakone",
+          "asakusa-ueno",
+          "shibuya-shinjuku",
+          "tokyo-disney",
+          "usj",
+          "dotonbori",
+          "gion-higashiyama",
+          "fushimi-inari",
+          "arashiyama",
+          "fuji-kawaguchiko",
+          "lake-kawaguchiko",
+          "osaka-castle"
+        ]
+      },
+      "createdAt": "2026-08-23T09:00:08.000Z"
+    },
+    {
+      "id": "msg-quick-3",
+      "tripId": "demo-japan-quick",
+      "authorType": "member",
+      "authorMemberId": "m-anna",
+      "messageType": "user_text",
+      "textContent": "镰仓海边和电车很好看，但专门从东京跑一天有点不值。",
+      "visibility": "group",
+      "createdAt": "2026-08-23T09:02:00.000Z"
+    },
+    {
+      "id": "msg-quick-4",
+      "tripId": "demo-japan-quick",
+      "authorType": "member",
+      "authorMemberId": "m-bo",
+      "messageType": "user_text",
+      "textContent": "USJ 我很想去，如果去大阪我愿意把它当完整一天。",
+      "visibility": "group",
+      "createdAt": "2026-08-23T09:03:10.000Z"
+    },
+    {
+      "id": "msg-quick-5",
+      "tripId": "demo-japan-quick",
+      "authorType": "member",
+      "authorMemberId": "m-chen",
+      "messageType": "user_text",
+      "textContent": "京都的祇园和伏见稻荷我喜欢，但不想每天都走太多，节奏轻松一点更好。",
+      "visibility": "group",
+      "createdAt": "2026-08-23T09:04:20.000Z"
+    },
+    {
+      "id": "msg-quick-6",
+      "tripId": "demo-japan-quick",
+      "authorType": "member",
+      "authorMemberId": "m-ding",
+      "messageType": "user_text",
+      "textContent": "箱根温泉挺好，但如果交通太折腾我会犹豫。",
+      "visibility": "group",
+      "createdAt": "2026-08-23T09:05:35.000Z"
+    }
+  ],
+  "materials": [
+    {
+      "id": "mat-quick-kamakura-xhs",
+      "tripId": "demo-japan-quick",
+      "createdByType": "member",
+      "createdByMemberId": "m-anna",
+      "materialType": "url",
+      "sourceType": "social_media",
+      "sourceProvider": "xiaohongshu",
+      "sourceUrl": "https://www.xiaohongshu.com/search_result?keyword=%E9%95%B0%E4%BB%93%20%E6%B5%B7%E8%BE%B9%20%E7%94%B5%E8%BD%A6",
+      "rawText": "小红书搜索：镰仓 海边 电车",
+      "title": "小红书：镰仓海边电车攻略",
+      "summary": "成员主动分享的小红书搜索入口，绑定到镰仓，用于现场查看外部灵感来源。",
+      "status": "interested",
+      "primaryNodeId": "kamakura",
+      "extractionStatus": "partial",
+      "extractionConfidence": 0.82,
+      "createdAt": "2026-08-23T09:07:00.000Z"
+    },
+    {
+      "id": "mat-quick-usj-xhs",
+      "tripId": "demo-japan-quick",
+      "createdByType": "member",
+      "createdByMemberId": "m-bo",
+      "materialType": "url",
+      "sourceType": "social_media",
+      "sourceProvider": "xiaohongshu",
+      "sourceUrl": "https://www.xiaohongshu.com/search_result?keyword=USJ%20%E6%94%BB%E7%95%A5",
+      "rawText": "小红书搜索：USJ 攻略",
+      "title": "小红书：USJ 一日攻略",
+      "summary": "博文分享的 USJ 外部素材，后续规划时会提示需要完整一天。",
+      "status": "interested",
+      "primaryNodeId": "usj",
+      "extractionStatus": "partial",
+      "extractionConfidence": 0.8,
+      "createdAt": "2026-08-23T09:07:40.000Z"
+    },
+    {
+      "id": "mat-quick-kyoto-guide",
+      "tripId": "demo-japan-quick",
+      "createdByType": "member",
+      "createdByMemberId": "m-chen",
+      "materialType": "url",
+      "sourceType": "external_link",
+      "sourceProvider": "user_link",
+      "sourceUrl": "https://www.japan-guide.com/e/e2158.html",
+      "rawText": "京都传统街区参考",
+      "title": "外部攻略：京都传统街区",
+      "summary": "用户主动分享的外部网页，绑定到祇园 / 东山。",
+      "status": "seen",
+      "primaryNodeId": "gion-higashiyama",
+      "extractionStatus": "partial",
+      "extractionConfidence": 0.74,
+      "createdAt": "2026-08-23T09:08:30.000Z"
+    }
+  ],
+  "seedEvents": [
+    {
+      "id": "seed-quick-rxn-kamakura-anna",
+      "type": "reaction",
+      "memberId": "m-anna",
+      "nodeId": "kamakura",
+      "reaction": "concern",
+      "createdAt": "2026-08-23T09:02:30.000Z"
+    },
+    {
+      "id": "seed-quick-rxn-kamakura-bo",
+      "type": "reaction",
+      "memberId": "m-bo",
+      "nodeId": "kamakura",
+      "reaction": "want_to_go",
+      "createdAt": "2026-08-23T09:03:35.000Z"
+    },
+    {
+      "id": "seed-quick-rxn-kamakura-ding",
+      "type": "reaction",
+      "memberId": "m-ding",
+      "nodeId": "kamakura",
+      "reaction": "neutral",
+      "createdAt": "2026-08-23T09:06:00.000Z"
+    },
+    {
+      "id": "seed-quick-rxn-usj-bo",
+      "type": "reaction",
+      "memberId": "m-bo",
+      "nodeId": "usj",
+      "reaction": "must_go",
+      "createdAt": "2026-08-23T09:03:45.000Z"
+    },
+    {
+      "id": "seed-quick-rxn-usj-chen",
+      "type": "reaction",
+      "memberId": "m-chen",
+      "nodeId": "usj",
+      "reaction": "not_interested",
+      "createdAt": "2026-08-23T09:04:55.000Z"
+    },
+    {
+      "id": "seed-quick-rxn-gion-chen",
+      "type": "reaction",
+      "memberId": "m-chen",
+      "nodeId": "gion-higashiyama",
+      "reaction": "want_to_go",
+      "createdAt": "2026-08-23T09:05:00.000Z"
+    },
+    {
+      "id": "seed-quick-rxn-fushimi-chen",
+      "type": "reaction",
+      "memberId": "m-chen",
+      "nodeId": "fushimi-inari",
+      "reaction": "concern",
+      "createdAt": "2026-08-23T09:05:20.000Z"
+    },
+    {
+      "id": "seed-quick-rxn-hakone-ding",
+      "type": "reaction",
+      "memberId": "m-ding",
+      "nodeId": "hakone",
+      "reaction": "want_to_go",
+      "createdAt": "2026-08-23T09:06:05.000Z"
+    },
+    {
+      "id": "seed-quick-op-kamakura-anna",
+      "type": "place_comment",
+      "memberId": "m-anna",
+      "nodeId": "kamakura",
+      "sourceType": "card_comment",
+      "text": "画面感很强，海边和江之电都喜欢；但最好不要为了它单独花一整天。",
+      "reaction": "concern",
+      "createdAt": "2026-08-23T09:06:40.000Z"
+    },
+    {
+      "id": "seed-quick-op-usj-bo",
+      "type": "place_comment",
+      "memberId": "m-bo",
+      "nodeId": "usj",
+      "sourceType": "card_comment",
+      "text": "USJ 是我这趟最想要的项目，可以接受大阪多住一晚。",
+      "reaction": "must_go",
+      "createdAt": "2026-08-23T09:07:15.000Z"
+    },
+    {
+      "id": "seed-quick-op-gion-chen",
+      "type": "place_comment",
+      "memberId": "m-chen",
+      "nodeId": "gion-higashiyama",
+      "sourceType": "card_comment",
+      "text": "祇园 / 东山很适合慢慢逛，但我希望一天里不要塞太多寺社。",
+      "reaction": "want_to_go",
+      "createdAt": "2026-08-23T09:08:05.000Z"
+    },
+    {
+      "id": "seed-quick-op-hakone-ding",
+      "type": "place_comment",
+      "memberId": "m-ding",
+      "nodeId": "hakone",
+      "sourceType": "voice_comment",
+      "text": "箱根温泉我挺想试，但路线最好轻松一点，不要换乘太多。",
+      "reaction": "concern",
+      "createdAt": "2026-08-23T09:08:50.000Z"
+    }
+  ]
+}

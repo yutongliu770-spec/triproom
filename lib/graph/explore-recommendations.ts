@@ -53,7 +53,6 @@ export function createInitialExploreState(input: {
   return {
     tripId: input.tripId,
     memberId: input.memberId,
-    currentClusterNodeId: "kyoto",
     recommendationBiasTags: [],
     seenPlaceIds: input.cards.map((card) => card.nodeId),
     dismissedPlaceIds: [],
@@ -107,14 +106,10 @@ export function recommendExploreCards(input: {
 
   if (action.type === "clear_scope") {
     nextState.currentScopeNodeId = undefined;
-    candidateClusterId = chooseNextCluster({
-      nodes: input.nodes,
-      relations: input.relations,
-      seenPlaceIds: nextState.seenPlaceIds,
-      currentClusterNodeId: previousState.currentClusterNodeId
-    });
-    nextState.currentClusterNodeId = candidateClusterId;
-    statusText = "已回到全日本探索，会继续按地域小簇切换具体地点。";
+    candidateClusterId = undefined;
+    nextState.currentClusterNodeId = undefined;
+    focusNodeId = "japan";
+    statusText = "已回到全日本探索，会展示日本下面的全部地点卡片。";
   } else if (action.type === "next_cluster") {
     candidateClusterId = chooseNextCluster({
       nodes: input.nodes,
@@ -137,11 +132,11 @@ export function recommendExploreCards(input: {
   } else if (action.type === "focus_node" && focusNode && isConcreteExploreNode(focusNode)) {
     const cluster = clusterForNode(focusNode, input.nodes);
     directPlaceNodeId = focusNode.id;
-    nextState.currentScopeNodeId = focusNode.id;
+    nextState.currentScopeNodeId = cluster?.id;
     nextState.currentClusterNodeId = cluster?.id;
-    candidateClusterId = focusNode.id;
+    candidateClusterId = cluster?.id;
     focusNodeId = focusNode.id;
-    statusText = `正在探索：${focusNode.canonicalName}`;
+    statusText = `已定位到 ${focusNode.canonicalName}，会在${cluster?.canonicalName ?? "当前城市"}范围内继续探索。`;
   } else if (action.type === "focus_node" && focusNode && CLUSTER_NODE_TYPES.has(focusNode.nodeType)) {
     nextState.currentScopeNodeId = focusNode.id;
     nextState.currentClusterNodeId = focusNode.id;
@@ -150,13 +145,8 @@ export function recommendExploreCards(input: {
     statusText = `正在探索：${focusNode.canonicalName}`;
   } else if (action.type === "focus_node" && focusNode?.nodeType === "country") {
     nextState.currentScopeNodeId = undefined;
-    candidateClusterId = chooseNextCluster({
-      nodes: input.nodes,
-      relations: input.relations,
-      seenPlaceIds: nextState.seenPlaceIds,
-      currentClusterNodeId: previousState.currentClusterNodeId
-    });
-    nextState.currentClusterNodeId = candidateClusterId;
+    candidateClusterId = undefined;
+    nextState.currentClusterNodeId = undefined;
     focusNodeId = focusNode.id;
     statusText = `正在探索：${focusNode.canonicalName}`;
   } else if (action.type === "search" && directMatch && isConcreteExploreNode(directMatch)) {
@@ -180,18 +170,14 @@ export function recommendExploreCards(input: {
       ...parsedBias.wantedTags,
       ...previousState.recommendationBiasTags
     ]).slice(0, 6);
-    candidateClusterId = chooseClusterForBias({
-      nodes: input.nodes,
-      relations: input.relations,
-      wantedTags: nextState.recommendationBiasTags,
-      seenPlaceIds: nextState.seenPlaceIds,
-      currentClusterNodeId: previousState.currentClusterNodeId
-    });
-    nextState.currentClusterNodeId = candidateClusterId;
+    candidateClusterId = previousState.currentScopeNodeId ?? previousState.currentClusterNodeId;
+    nextState.currentScopeNodeId = previousState.currentScopeNodeId;
+    nextState.currentClusterNodeId = previousState.currentClusterNodeId;
+    focusNodeId = nextState.currentScopeNodeId ?? "japan";
     statusText = `已把“${nextState.queryScope ?? "新的偏好"}”作为推荐倾向，但不会只看单一类型。`;
   } else if (action.type === "initial") {
-    candidateClusterId = previousState.currentClusterNodeId ?? "kyoto";
-    nextState.currentClusterNodeId = candidateClusterId;
+    candidateClusterId = previousState.currentScopeNodeId ?? previousState.currentClusterNodeId;
+    if (candidateClusterId) nextState.currentClusterNodeId = candidateClusterId;
   }
 
   if (directPlaceNodeId) {
@@ -207,15 +193,8 @@ export function recommendExploreCards(input: {
   } else if (nextState.queryScope) {
     candidates = concreteNodes(input.nodes);
   } else {
-    const clusterId = candidateClusterId ?? chooseNextCluster({
-      nodes: input.nodes,
-      relations: input.relations,
-      seenPlaceIds: nextState.seenPlaceIds,
-      currentClusterNodeId: previousState.currentClusterNodeId
-    });
-    nextState.currentClusterNodeId = clusterId;
-    candidates = clusteredConcreteDescendants(clusterId, input.nodes, input.relations);
-    focusNodeId = clusterId;
+    candidates = clusteredConcreteDescendants("japan", input.nodes, input.relations);
+    focusNodeId = "japan";
   }
 
   const ranked = rankCandidates({
@@ -229,7 +208,7 @@ export function recommendExploreCards(input: {
     directPlaceNodeId
   });
   const ordered = shouldUseClusteredOrder(nextState, action)
-    ? orderByCluster(ranked, input.nodes)
+    ? interleaveByCluster(ranked, input.nodes)
     : ranked;
   const selected = ordered.slice(0, MAX_SCOPE_CARD_COUNT);
   const fallback = selected.length > 0 ? selected : candidates.slice(0, MAX_SCOPE_CARD_COUNT);
@@ -338,31 +317,6 @@ function chooseNextCluster(input: {
   return scored.sort((a, b) => b.score - a.score)[0]?.cluster.id ?? "japan";
 }
 
-function chooseClusterForBias(input: {
-  nodes: DestinationNode[];
-  relations: DestinationRelation[];
-  wantedTags: string[];
-  seenPlaceIds: string[];
-  currentClusterNodeId?: string;
-}) {
-  const wanted = new Set(input.wantedTags);
-  const seen = new Set(input.seenPlaceIds);
-  const scored = clusterNodes(input.nodes).map((cluster) => {
-    const concrete = concreteDescendants(cluster.id, input.nodes, input.relations);
-    const tagScore = concrete.reduce(
-      (sum, node) => sum + node.tags.filter((tag) => wanted.has(tag)).length,
-      0
-    );
-    const unseenCount = concrete.filter((node) => !seen.has(node.id)).length;
-    return {
-      cluster,
-      score: tagScore * 6 + unseenCount + (cluster.id === input.currentClusterNodeId ? 1 : 0)
-    };
-  });
-
-  return scored.sort((a, b) => b.score - a.score)[0]?.cluster.id;
-}
-
 function findExactNode(query: string, nodes: DestinationNode[]) {
   const normalized = normalize(query);
   return nodes.find((node) =>
@@ -424,7 +378,9 @@ function concreteDescendants(
   seen = new Set<string>()
 ): DestinationNode[] {
   const children = relations
-    .filter((relation) => relation.fromNodeId === nodeId)
+    .filter(
+      (relation) => relation.fromNodeId === nodeId && relation.relationType === "contains"
+    )
     .map((relation) => nodes.find((node) => node.id === relation.toNodeId))
     .filter((node): node is DestinationNode => Boolean(node));
   const result: DestinationNode[] = [];
@@ -463,14 +419,28 @@ function shouldUseClusteredOrder(
   );
 }
 
-function orderByCluster(nodes: DestinationNode[], allNodes: DestinationNode[]) {
-  return [...nodes].sort((left, right) => {
-    const leftCluster = clusterForNode(left, allNodes)?.id ?? left.id;
-    const rightCluster = clusterForNode(right, allNodes)?.id ?? right.id;
-    const clusterDelta = clusterPriority(leftCluster) - clusterPriority(rightCluster);
-    if (clusterDelta !== 0) return clusterDelta;
-    return 0;
-  });
+function interleaveByCluster(nodes: DestinationNode[], allNodes: DestinationNode[]) {
+  const buckets = new Map<string, DestinationNode[]>();
+
+  for (const node of nodes) {
+    const clusterId = clusterForNode(node, allNodes)?.id ?? node.id;
+    buckets.set(clusterId, [...(buckets.get(clusterId) ?? []), node]);
+  }
+
+  const orderedClusterIds = Array.from(buckets.keys()).sort(
+    (left, right) => clusterPriority(left) - clusterPriority(right)
+  );
+  const maxBucketLength = Math.max(...Array.from(buckets.values()).map((bucket) => bucket.length), 0);
+  const result: DestinationNode[] = [];
+
+  for (let index = 0; index < maxBucketLength; index += 1) {
+    for (const clusterId of orderedClusterIds) {
+      const node = buckets.get(clusterId)?.[index];
+      if (node) result.push(node);
+    }
+  }
+
+  return result;
 }
 
 function concreteNodes(nodes: DestinationNode[]) {

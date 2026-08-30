@@ -503,7 +503,45 @@ export interface PlanVariant {
     days: number;
     representativeNodeIds: string[];
     experienceSummary: string;
+    stayArea?: string;
   }>;
+  score?: number;
+  scoringBreakdown?: {
+    memberPreferenceFit: number;
+    groupFairness: number;
+    routeFeasibility: number;
+    schedulePace: number;
+    budgetFit: number;
+    dataConfidence: number;
+  };
+  validation?: {
+    passed: boolean;
+    issues: Array<{
+      severity: "info" | "warning" | "error";
+      code: string;
+      message: string;
+    }>;
+  };
+  itinerary?: Array<{
+    day: number;
+    city: string;
+    area?: string;
+    morning: string;
+    afternoon: string;
+    evening: string;
+    stayArea: string;
+    placeNodeIds: string[];
+    transport: string;
+    costText: string;
+    imageNodeId?: string;
+  }>;
+  route?: {
+    nodeIds: string[];
+    summary: string;
+  };
+  planningContextSnapshotId?: string;
+  modelName?: string;
+  modelVersion?: string;
   includedNodeIds: string[];
   excludedHighlights: string[];
   mobilityText: string;
@@ -533,5 +571,7 @@ export interface DemoRoomData {
   roomNodeStates: RoomNodeState[];
   placeOpinions?: PlaceOpinion[];
   memberPlaceStates?: MemberPlaceState[];
+  initialActiveMemberIds?: string[];
+  persistenceMode?: "database" | "seed_fallback";
   initialCards: TravelCard[];
 }

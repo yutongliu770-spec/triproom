@@ -395,26 +395,35 @@ model PlanningContextSnapshot {
 }
 
 model PlanVariant {
-  id                  String   @id
-  tripId              String   @map("trip_id")
-  version             Int
-  title               String
-  summary             String
-  status              String
-  totalDays           Int?     @map("total_days")
-  segments            Json
-  includedNodeIds     Json     @map("included_node_ids")
-  excludedHighlights  Json     @map("excluded_highlights")
-  mobilityText        String   @map("mobility_text")
-  budgetText          String   @map("budget_text")
-  budgetIsEstimate    Boolean  @map("budget_is_estimate")
-  gains               Json
-  tradeoffs           Json
-  basedOnSignalIds    Json     @map("based_on_signal_ids")
-  unresolvedQuestions Json     @map("unresolved_questions")
-  parentPlanId        String?  @map("parent_plan_id")
-  changeSummary       Json?    @map("change_summary")
-  createdAt           DateTime @default(now()) @map("created_at")
+  id                        String   @id
+  tripId                    String   @map("trip_id")
+  planningContextSnapshotId String?  @map("planning_context_snapshot_id")
+  version                   Int
+  title                     String
+  summary                   String
+  status                    String
+  totalDays                 Int?     @map("total_days")
+  segments                  Json
+  score                     Float?
+  scoringBreakdown          Json?    @map("scoring_breakdown")
+  validation                Json?
+  itinerary                 Json?
+  route                     Json?
+  includedNodeIds           Json     @map("included_node_ids")
+  excludedHighlights        Json     @map("excluded_highlights")
+  mobilityText              String   @map("mobility_text")
+  budgetText                String   @map("budget_text")
+  budgetIsEstimate          Boolean  @map("budget_is_estimate")
+  gains                     Json
+  tradeoffs                 Json
+  basedOnSignalIds          Json     @map("based_on_signal_ids")
+  unresolvedQuestions       Json     @map("unresolved_questions")
+  parentPlanId              String?  @map("parent_plan_id")
+  changeSummary             Json?    @map("change_summary")
+  modelName                 String?  @map("model_name")
+  modelVersion              String?  @map("model_version")
+  createdAt                 DateTime @default(now()) @map("created_at")
 
+  @@index([tripId, createdAt])
   @@map("plan_variants")
 }

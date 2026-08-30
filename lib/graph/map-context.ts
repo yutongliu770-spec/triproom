@@ -21,30 +21,16 @@ export interface FeaturedPlaceStats {
   candidatePlacesCount: number;
 }
 
-const CHILD_RELATION_TYPES = new Set([
-  "contains",
-  "nearby_day_trip",
-  "pairs_well_with",
-  "alternative_to",
-  "reachable_from"
-]);
+const HIERARCHY_RELATION_TYPE = "contains";
 
 export function semanticLevelForZoom(zoom: number): MapSemanticLevel {
   if (zoom <= 5) return "country";
-  if (zoom <= 7) return "region";
-  if (zoom <= 9) return "city";
-  if (zoom <= 12) return "district";
-  if (zoom <= 13) return "attraction";
-  return "poi";
+  return "city";
 }
 
 export function semanticZoomLabel(level: MapSemanticLevel) {
-  if (level === "country") return "Country / Region";
-  if (level === "region") return "Region / City";
-  if (level === "city") return "City";
-  if (level === "district") return "District / Attraction";
-  if (level === "attraction") return "Attraction";
-  return "POI";
+  if (level === "country") return "Country";
+  return "City";
 }
 
 export function focusZoomForNode(node: DestinationNode) {
@@ -78,32 +64,10 @@ export function resolveMapContext(input: {
   const topLevelPlaces = childPlaces("japan", input.nodes, input.relations).filter(isCountryLevelPlace);
   const city = nearestPlace(input.center, topLevelPlaces) ?? root;
 
-  if (level === "region" || level === "city") {
-    return {
-      level,
-      place: city,
-      breadcrumb: breadcrumbForPlace(city.id, input.nodes)
-    };
-  }
-
-  const cityChildren = childPlaces(city.id, input.nodes, input.relations);
-  const district = nearestPlace(input.center, cityChildren) ?? city;
-
-  if (level === "district") {
-    return {
-      level,
-      place: district,
-      breadcrumb: breadcrumbForPlace(district.id, input.nodes)
-    };
-  }
-
-  const districtChildren = childPlaces(district.id, input.nodes, input.relations);
-  const poi = nearestPlace(input.center, districtChildren) ?? district;
-
   return {
     level,
-    place: poi,
-    breadcrumb: breadcrumbForPlace(poi.id, input.nodes)
+    place: city,
+    breadcrumb: breadcrumbForPlace(city.id, input.nodes)
   };
 }
 
@@ -112,28 +76,13 @@ export function getMapPlacesForContext(input: {
   nodes: DestinationNode[];
   relations: DestinationRelation[];
 }) {
-  if (input.context.level === "country" || input.context.level === "region") {
+  if (input.context.level === "country") {
     return childPlaces("japan", input.nodes, input.relations).filter(isCountryLevelPlace);
   }
 
-  if (input.context.level === "city") {
-    const city = cityLevelAncestor(input.context.place, input.nodes) ?? input.context.place;
-    const children = childPlaces(city.id, input.nodes, input.relations);
-    return children.length ? children : [city];
-  }
-
-  if (input.context.level === "district" || input.context.level === "attraction") {
-    const children = childPlaces(input.context.place.id, input.nodes, input.relations);
-    if (children.length) return children;
-
-    const parent = input.context.place.parentId
-      ? input.nodes.find((node) => node.id === input.context.place.parentId)
-      : undefined;
-    return parent ? childPlaces(parent.id, input.nodes, input.relations) : [input.context.place];
-  }
-
-  const children = childPlaces(input.context.place.id, input.nodes, input.relations);
-  return children.length ? children : [input.context.place];
+  const city = cityLevelAncestor(input.context.place, input.nodes) ?? input.context.place;
+  const children = childPlaces(city.id, input.nodes, input.relations);
+  return children.length ? children : [city];
 }
 
 export function computeFeaturedPlaceStats(input: {
@@ -184,7 +133,7 @@ export function childPlaces(
   const childIds = relations
     .filter(
       (relation) =>
-        relation.fromNodeId === parentNodeId && CHILD_RELATION_TYPES.has(relation.relationType)
+        relation.fromNodeId === parentNodeId && relation.relationType === HIERARCHY_RELATION_TYPE
     )
     .map((relation) => relation.toNodeId);
 

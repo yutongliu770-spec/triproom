@@ -575,7 +575,7 @@ Solo Room 页面保留明显的“+ 邀请旅伴”入口。当前 MVP 可用“
 
 ## 6.1.1 Demo 初始状态
 
-预置 Demo Room 必须从真正模糊的旅行意向开始：
+Start from Scratch Demo Room 必须从真正模糊的旅行意向开始：
 
 ```text
 A：我们想去日本旅游。
@@ -601,6 +601,79 @@ planning_direction = unknown
 ```
 
 AI 第一轮应进入 Exploration / Knowledge Supply，主动给出日本几个主要旅行方向的 Place Carousel，而不是要求用户先填写完整问卷或直接生成详细行程。
+
+## 6.1.2 Hackathon Demo 入口
+
+TripRoom 需要提供两个用于 Hackathon / 评委体验的 Demo 入口。两者不是两套产品，也不得复制两套页面或业务逻辑；差异只在 Initial Seed State。
+
+```text
+/demo                 Demo 入口选择页
+/demo/quick           Quick Demo，跳转 /room/demo-japan-quick
+/demo/fresh           Start from Scratch，跳转 /room/demo-japan-7d
+/room/[tripId]        同一套 TripRoom 主界面
+```
+
+### Quick Demo
+
+Quick Demo 用于评委快速感知产品价值。该 Room 预置约 30% 已探索状态，但还没有进入最终规划。
+
+Quick Demo 至少预置：
+
+- A / B / C / D 四个 Demo Member，并默认全部加入 Room；
+- 一部分已发生的群聊；
+- 成员 Reaction；
+- PlaceOpinion，包括卡片文字评论和语音观点；
+- 用户主动分享的小红书 / 外部 Material；
+- 若干已经探索过的 Place 和若干仍未探索的 Place；
+- 一部分成员偏好已经形成；
+- 地图上部分地点被点亮；
+- 某些地点团队兴趣较高；
+- 某些地点讨论很多但存在分歧。
+
+Quick Demo 的预置数据应尽量以 Raw / Evidence / Reaction / Material 作为 seed。PostgreSQL 可用时，`seed:demo` 为保证比赛 reset 稳定，可以使用确定性派生数据直接重建以下链路，不调用真实模型：
+
+```text
+Evidence
+  -> Signal
+  -> MemberPlaceProfile
+  -> RoomPlaceProfile
+```
+
+用户后续真实交互必须继续通过正式 backend pipeline 增量生成 Signal / Profile。若数据库不可用，允许使用同一批 seed facts 在 MockTravelProvider 中生成 fallback 展示状态，但必须清楚标记为 demo fallback，不得把它当作生产偏好计算。
+
+Quick Demo 中必须保留现场可触发动作：
+
+- 切换成员后对地点新增 Reaction 或评论，并看到 PlaceOpinion、Profile 和地图状态更新；
+- 查看或新增一条小红书 / 抖音 / 外部素材，并绑定到对应 Place；
+- 进入 Planning Workspace，由 `PlanningContextBuilder -> TravelPlanningAgent -> DeepSeekModelProvider -> Validator -> Scorer` 生成至少 2 个有效候选方案，展示完整日程和 PLAN Map，并支持“第二天太满了，轻松一点”这类 AI Revision 生成新 PlanVersion。
+
+### Start from Scratch
+
+Start from Scratch 用于展示冷启动能力。该 Room 初始只保留：
+
+```text
+我们想去日本旅游。
+```
+
+不得提前预设：
+
+- 天数；
+- 东京 / 京都 / 富士山 / USJ 等具体偏好；
+- 预算；
+- 已形成路线；
+- 隐藏 Preference / Profile。
+
+AI 应从这个模糊状态开始推荐地点，用户再通过探索、Reaction、评论和素材逐步形成 Preference、点亮地图，并在后续进入 Planning。
+
+### Demo Reset
+
+Demo 数据必须可重复恢复。MVP 推荐提供：
+
+```bash
+npm run seed:demo
+```
+
+该命令只允许重置已知 demo trip，不得影响非 demo 数据；在正式 Production 环境必须拒绝执行。每次 reset 后 Quick Demo 应恢复同一组固定初始事实，再通过 backend pipeline 重新生成派生偏好数据。
 
 ## 6.2 冷启动：用户信息为零或极少
 
@@ -1734,7 +1807,9 @@ Swipe 行为要求：
 /                       产品首页 / 创建房间
 /room/[tripId]          TripRoom 主界面
 /room/[tripId]/join     加入房间
-/demo                   预置演示房间
+/demo                   Demo 入口选择页
+/demo/quick             Quick Demo 入口
+/demo/fresh             Start from Scratch Demo 入口
 ```
 
 ## 15.2 桌面端布局
@@ -2400,6 +2475,8 @@ POST   /api/trips/:tripId/ai/process-event
 app/
   page.tsx
   demo/page.tsx
+  demo/quick/page.tsx
+  demo/fresh/page.tsx
   room/[tripId]/page.tsx
   room/[tripId]/join/page.tsx
   api/
@@ -2433,7 +2510,8 @@ prisma/ or drizzle/
   migrations/
 seed/
   japan-destinations.json
-  demo-room.json
+  demo-room-fresh.json
+  demo-room-quick.json
 public/
   destinations/
 tests/

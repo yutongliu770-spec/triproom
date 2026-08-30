@@ -21,11 +21,11 @@ describe("map context resolver", () => {
     });
 
     expect(semanticLevelForZoom(4)).toBe("country");
-    expect(semanticLevelForZoom(6)).toBe("region");
+    expect(semanticLevelForZoom(6)).toBe("city");
     expect(semanticLevelForZoom(8)).toBe("city");
-    expect(semanticLevelForZoom(12)).toBe("district");
-    expect(semanticLevelForZoom(13)).toBe("attraction");
-    expect(semanticLevelForZoom(14)).toBe("poi");
+    expect(semanticLevelForZoom(12)).toBe("city");
+    expect(semanticLevelForZoom(13)).toBe("city");
+    expect(semanticLevelForZoom(14)).toBe("city");
 
     const japanContext = resolveMapContext({
       center: { latitude: 36.2048, longitude: 138.2529 },
@@ -60,9 +60,11 @@ describe("map context resolver", () => {
 
     expect(tokyoContext.breadcrumb.map((node) => node.id)).toEqual(["japan", "tokyo"]);
     expect(tokyoPlaceIds).toEqual(
-      expect.arrayContaining(["asakusa-ueno", "shibuya-shinjuku", "tokyo-disney", "kamakura"])
+      expect.arrayContaining(["asakusa-ueno", "shibuya-shinjuku", "tokyo-disney"])
     );
     expect(tokyoPlaceIds).not.toContain("tokyo");
+    expect(tokyoPlaceIds).not.toContain("kamakura");
+    expect(tokyoPlaceIds).not.toContain("hakone");
 
     const asakusaContext = resolveMapContext({
       center: { latitude: 35.7148, longitude: 139.7967 },
@@ -76,13 +78,9 @@ describe("map context resolver", () => {
       relations: room.relations
     }).map((node) => node.id);
 
-    expect(asakusaContext.breadcrumb.map((node) => node.id)).toEqual([
-      "japan",
-      "tokyo",
-      "asakusa-ueno"
-    ]);
+    expect(asakusaContext.breadcrumb.map((node) => node.id)).toEqual(["japan", "tokyo"]);
     expect(asakusaPlaceIds).toEqual(
-      expect.arrayContaining(["sensoji", "nakamise-dori", "tokyo-skytree"])
+      expect.arrayContaining(["asakusa-ueno", "shibuya-shinjuku", "tokyo-disney"])
     );
 
     const tokyo = room.nodes.find((node) => node.id === "tokyo");

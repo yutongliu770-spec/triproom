@@ -18,6 +18,8 @@ TripRoom 是一个 Mobile-first Responsive Web App 形态的旅行探索助手 M
 app/
   page.tsx
   demo/page.tsx
+  demo/quick/page.tsx
+  demo/fresh/page.tsx
   room/[tripId]/page.tsx
   room/[tripId]/join/page.tsx
   api/trips/
@@ -53,7 +55,8 @@ lib/
     service.ts
 seed/
   japan-destinations.json
-  demo-room.json
+  demo-room-fresh.json
+  demo-room-quick.json
 specs/
   data-model.md
 prisma/
@@ -105,11 +108,20 @@ Explore 的本地推荐由 `lib/graph/explore-recommendations.ts` 负责。它�
 Seed Data 位于：
 
 - `seed/japan-destinations.json`：日本目的地、景点、关系边、示例预算档位和示例交通关系。
-- `seed/demo-room.json`：演示房间、演示成员和初始聊天消息。
+- `seed/demo-room-fresh.json`：Start from Scratch 冷启动房间，只保留“我们想去日本旅游”的模糊意向。
+- `seed/demo-room-quick.json`：Quick Demo 房间，预置约 30% 已探索状态的原始消息、Reaction、PlaceOpinion 和外部素材。
+
+Demo seed 定义初始化事实，以及用于稳定演示的确定性派生结果。PostgreSQL 可用时，`seed:demo` 会直接写入 Quick Demo 的 `Raw / Evidence / Reaction / Material / Signal / MemberPlaceProfile / RoomPlaceProfile`，不调用 DeepSeek 或其他真实模型，避免比赛前 reset 被外部网络阻塞。用户后续真实交互仍通过 `EvidenceService -> PreferenceAnalysisService -> ModelProvider -> PreferenceReducer -> RoomPlaceAggregator` 增量更新偏好链。没有数据库时，`MockTravelProvider` 会基于同一批 seed facts 生成 fallback 展示状态，保证评委仍能看到预置演示，但该 fallback 会以 `demoSeedFallback` 标记。
+
+已确认的演示入口：
+
+- `/demo`：Demo 入口选择页。
+- `/demo/quick`：跳转到 `/room/demo-japan-quick`，用于评委快速看到多人探索、地图点亮、分歧和素材沉淀。
+- `/demo/fresh`：跳转到 `/room/demo-japan-7d`，用于展示从“我们想去日本旅游”开始的冷启动。
 
 ## Solo / Group Demo 行为
 
-当前 MVP 没有正式账户体系。演示房间默认以 1 位成员进入 Solo Room，初始只知道“想去日本旅游”，不预设天数、城市、景点、预算或路线方向。点击左侧 `+ 邀请旅伴` 会依次加入 Demo 成员，Room 从 1 人自然变成 2+ 人 Group Room。
+当前 MVP 没有正式账户体系。Fresh Demo 默认以 1 位成员进入 Solo Room，初始只知道“想去日本旅游”，不预设天数、城市、景点、预算或路线方向。点击左侧 `+ 邀请旅伴` 会依次加入 Demo 成员，Room 从 1 人自然变成 2+ 人 Group Room。Quick Demo 默认激活 A / B / C / D 四位成员，并带有一部分已经发生过的探索事实，但仍复用同一个 Room 页面和数据模型。
 
 左侧成员头像是 Demo Member Switcher，用于在单端模拟 A / B / C / D 多人加入同一房间。切换当前身份后：
 
@@ -119,7 +131,7 @@ Seed Data 位于：
 - 成员信号按 `memberId` 分开记录；
 - 切换身份不会刷新 Room 或丢失聊天、素材、Carousel 和 Reaction 状态。
 
-同一浏览器的多个 `/room/demo-japan-7d` 标签页会通过 `localStorage + BroadcastChannel` 同步房间快照，实现准实时 Demo：
+同一浏览器的多个同一 Room 标签页会通过 `localStorage + BroadcastChannel` 同步房间快照，实现准实时 Demo：
 
 - 群聊消息；
 - 素材池；
@@ -175,7 +187,7 @@ RoomPlaceProfile
 - `RoomPlaceAggregator`：增量更新对应地点的 `RoomPlaceProfile` 和 `RoomNodeState`。
 - `ConstraintService`：保存显式或派生的预算、日期、must-go、hard reject、路线条件等约束。
 
-当前使用 `MockModelProvider`，保留 `ModelProvider` 接口用于未来替换真实模型。React Component 不直接调用 Prisma 或模型。
+当前偏好分析默认仍可使用 `MockModelProvider` 保持本地可运行；Hackathon Planning 主链可通过 `MODEL_PROVIDER=deepseek` 或服务端存在 `DEEPSEEK_API_KEY` 切换到 `DeepSeekModelProvider`。React Component 不直接调用 Prisma 或模型，规划按钮只调用后端 API。
 
 群聊是沟通层，不再承载大地点卡。AI 推荐地点时，Chat 中只显示轻量 Place Reference；完整地点卡保留在中央 `探索`。方案同理，Chat 只出现轻量方案引用，完整方案位于 `规划`。
 
@@ -190,7 +202,7 @@ RoomPlaceProfile
 
 `AI Exploration Input` 位于中央 `探索` 模式内，不是第二个群聊。它默认只用于当前成员和 AI 调整探索方向、推荐相关地点、记录探索信号；用户勾选“分享到群聊”后才会把输入同步为公开聊天消息。
 
-Explore Search、Breadcrumb、卡片上的探索区域按钮和 AI Exploration Input 共用同一个 `exploration_path` / Explore 状态。`exploration_path` 表示用户主动确认的“正在探索区域”，不会因为普通 Swipe 或查看下一张卡片自动变化。搜索成功后保留用户原始输入；搜索城市会把路径更新到 Country / City 并推荐该城市下的具体 Place；搜索具体地点会把路径更新到 Country / City / Place 并把该 Place 放到当前卡片；搜索“温泉 / 自然 / 传统文化”这类模糊体验会写入推荐倾向，影响当前探索区域内下一批具体 Place 的排序，但不会变成只看单一类型的硬过滤。
+Explore Search、Breadcrumb、卡片上的探索区域按钮和 AI Exploration Input 共用同一个 `exploration_path` / Explore 状态。`exploration_path` 只保留 Country / City 两层，不展示 district / attraction / poi 等更细层级；选中 `日本` 时展示日本下面的全部地点卡片，选中 `日本 / 东京` 时展示东京下面的全部地点卡片。搜索成功后保留用户原始输入；搜索城市会把路径更新到 Country / City；搜索具体地点会把该 Place 放到当前卡片，但路径仍停留在所属 Country / City；搜索“温泉 / 自然 / 传统文化”这类模糊体验会写入推荐倾向，影响当前探索区域内卡片排序，但不会变成只看单一类型的硬过滤。
 
 外部 URL、小红书链接、截图和图片会保存为 `Material`，原始 `sourceUrl` 会被保留。系统优先使用现有 Place 别名解析并绑定 `primaryNodeId`；无法确认时保持 `unresolved`，不伪造坐标或外部 Provider 数据。
 
@@ -198,7 +210,7 @@ Explore Search、Breadcrumb、卡片上的探索区域按钮和 AI Exploration I
 
 AI 推荐多个地点时，地点卡在中央 `探索` 中展示为单卡 Swipe 模型，不再平铺成 Grid，也不再使用连续横向 Carousel。界面一次只突出一张主卡，保留下一张堆叠提示、上一张 / 下一张按钮，并支持桌面鼠标拖动和移动端手指左右滑动。Swipe 只改变当前查看的 Place 和地图高亮，不会自动改写 `exploration_path`，也不会自动写入喜欢或不喜欢；偏好仍必须通过显式 Reaction、文字或语音表达。
 
-Explore 默认优先展示具体 Place，例如 attraction、district、area、landmark 或 representative POI，而不是东京、京都、大阪这类城市卡。初始 `exploration_path` 是 `日本`，下方卡片展示日本范围内按城市 / 区域轻量聚类后的具体地点；用户点击卡片上的定位按钮才会把路径主动切换到该城市或区域，例如 `日本 / 京都`。删除末级会回到上一级，点击路径中某一级的随机切换会在合法 Parent / Child hierarchy 内替换同级目的地。推荐池内部可以有限，但 UI 不显示卡片总数、剩余数量或已探索分母；当前方向暂时没有更多推荐时，只提示“这个方向目前已经探索得差不多了”并提供换地方、回上级、搜索新地点等动作。
+Explore 默认优先展示具体 Place，例如 attraction、district、area、landmark 或 representative POI，而不是东京、京都、大阪这类城市卡。初始 `exploration_path` 是 `日本`，下方卡片展示日本范围内的全部具体地点，并按城市 / 区域交错排列，不能只连续展示某一个城市的小簇；用户点击卡片上的定位按钮才会把路径主动切换到所属城市或区域，例如 `日本 / 京都`。删除末级会回到国家层，点击城市级随机切换会在合法城市 / 区域内替换同级目的地。推荐池内部可以有限，但 UI 不显示卡片总数、剩余数量或已探索分母；当前方向暂时没有更多推荐时，只提示“这个方向目前已经探索得差不多了”并提供换地方、回上级、搜索新地点等动作。
 
 `StandardPlaceCard` 是当前详细 Place 展示的唯一标准组件。Explore 当前主卡、Map 点击地点、Discovered Mini Card 点击地点、Chat Place Reference 打开地点、Planning 方案地点打开后，都复用同一个 Standard Place Card，并通过同一个 `place_id / DestinationNode.id` 加载数据。
 
@@ -253,7 +265,23 @@ MODEL_API_KEY=""
 SPEECH_TO_TEXT_ADAPTER_MODE="mock"
 VISION_EXTRACTION_ADAPTER_MODE="mock"
 PRICE_ESTIMATE_ADAPTER_MODE="mock"
+DEEPSEEK_API_KEY=""
+DEEPSEEK_BASE_URL="https://api.deepseek.com"
+DEEPSEEK_MODEL="deepseek-chat"
 ```
+
+公开 Hackathon Demo 的服务端 / Vercel 环境应配置：
+
+```text
+DATABASE_URL
+MODEL_PROVIDER="deepseek"
+DEEPSEEK_API_KEY
+DEEPSEEK_BASE_URL
+DEEPSEEK_MODEL
+TRAVEL_PROVIDER="mock"
+```
+
+`DEEPSEEK_API_KEY` 只允许放在后端或部署平台 Secret 中，不写入 Git，也不暴露给浏览器。
 
 ## 启动
 
@@ -264,17 +292,30 @@ npm run db:seed
 npm run dev
 ```
 
+`npm run dev` 会先执行 `predev`，自动清理 `.next`、`node_modules/.cache/next` 和系统临时目录中的 Next SWC 缓存。不要在 dev server 运行时同时执行 `npm run build`；如果本地先跑 `next build` 后再跑 `next dev`，或热更新过程中出现 `Cannot find module './vendor-chunks/lucide-react.js'` 这类运行时错误，先停掉 dev server 再重新执行 `npm run dev`。
+
 打开：
 
 ```text
 http://localhost:3000/demo
 ```
 
-直接进入演示房间：
+直接进入两个演示房间：
 
 ```text
+http://localhost:3000/demo/quick
+http://localhost:3000/demo/fresh
+http://localhost:3000/room/demo-japan-quick
 http://localhost:3000/room/demo-japan-7d
 ```
+
+比赛或演示前重置固定 Demo 数据：
+
+```bash
+npm run seed:demo
+```
+
+`seed:demo` 只会重建已知 demo trip（`demo-japan-quick` 和 `demo-japan-7d`），并在 `NODE_ENV=production` 或 `VERCEL_ENV=production` 时拒绝执行。刷新页面后，数据库状态会优先于浏览器旧 localStorage 快照。
 
 测试移动端体验时，可在浏览器 DevTools 中切到手机宽度，验证 `讨论 / 探索 / 地图 / 规划` 切换、单卡 Swipe、底部输入、邀请旅伴和探索地图在窄屏下仍可使用，且页面本身不会产生横向滚动。
 
@@ -290,6 +331,7 @@ npm run build
 当前测试覆盖：
 
 - `TravelDataService + MockTravelProvider`：确保外部旅行能力在没有 API Key 的情况下返回 Mock 数据，并为 Place / TravelCard 生成小红书外部探索 URL。
+- `Demo Seeds`：验证 Fresh Demo 保持冷启动，Quick Demo 由原始 seed facts 生成 Evidence / Signal / Profile fallback 和地图点亮状态。
 - `Preference Data Chain`：在 `DATABASE_URL` 指向已迁移 PostgreSQL 时，验证一条成员原话可以写入 Evidence，并流经 Signal、MemberPlaceProfile、RoomPlaceProfile，且保留来源引用和自然语言原因。
 - `RoomExperience` 核心路径：模糊日本意向冷启动、Solo Room、邀请 Demo Member 进入 Group、Member Switcher、左侧 Group 聊天与收起 / 展开、中央 Place Workspace、Explore Search、`exploration_path` Breadcrumb、卡片 Swipe 不改探索区域、卡片定位按钮主动切换城市 / 区域、合法同级随机切换、Cluster 推荐、单卡 Swipe Explore、Standard Place Card、卡片图片切换、Comment Panel、沉淀 Country → City → Place 层级收藏、City 探索度、Mini Card 打开统一 Standard Card、小红书攻略入口、用户分享小红书链接/截图入素材池、成员级 Reaction、群聊提及自动生成 PlaceOpinion、语音转写消息、方案生成、方案地点打开、方案评论和新版修订。
 - Exploration Map 核心路径：真实地图底图、真实经纬度 Pin、Seed Popular Places 灰态展示、连续地图自由缩放 / 拖拽、地图上下文 Breadcrumb、Semantic Zoom 层级切换、城市重点子地点统计、地图 Compact Place Card、地图点击打开中央 Place Detail、聊天提及地点、多人 Reaction、成员观点、素材来源、成员未读提示和未定位新地点展示。
@@ -325,16 +367,19 @@ npm run build
 
 ## 数据库
 
-`prisma/schema.prisma` 和迁移位于 `prisma/migrations/`。当前 MVP 的旅行内容仍来自 Mock Seed Data，但偏好链已经可以写入 PostgreSQL：Chat Message、Reaction、Place Comment、Voice Comment / Transcript、Exploration Input 和 Material 会先保存原始事实，再创建 Evidence，并触发 MockModelProvider 分析生成 Signal / Constraint / Profile。
+`prisma/schema.prisma` 和迁移位于 `prisma/migrations/`。当前 MVP 的旅行内容仍来自 Mock Seed Data，但偏好链已经可以写入 PostgreSQL：Chat Message、Reaction、Place Comment、Voice Comment / Transcript、Exploration Input 和 Material 会先保存原始事实，再创建 Evidence，并触发 ModelProvider 分析生成 Signal / Constraint / Profile。
 
 数据模型的产品语义说明位于 `specs/data-model.md`。该文档将偏好系统核心链路收敛为 `Evidence → Signal → Constraint → MemberPlaceProfile → RoomPlaceProfile → PlanningContextSnapshot` 六张核心表，并说明它们为什么存在、谁写谁读，以及 Travel Planning Agent 如何读取它们。`Place / Member / Room / Material / Plan` 属于产品业务数据，数据库实际实现仍以 PostgreSQL + Prisma schema / migration 为准。
 
 `DestinationNode` 预留 `social_discovery` JSON 字段，用于保存 Place 级外部探索入口 metadata。当前运行时由 `social-discovery.ts` 生成小红书搜索 URL；正式接入授权社交内容 Provider 时可写入该字段。
 
+Planning 主链由 `PlanningContextBuilder -> TravelPlanningService -> ModelProvider.generateTravelPlans() -> PlanValidator -> PlanningScorer -> PlanVariant` 组成。生成方案时会创建 `PlanningContextSnapshot`，DeepSeek 只读取该快照整理出的 Room / Member / Place / Preference / Constraint 上下文；后端再执行确定性校验、评分并持久化 `PlanVariant` 的完整日程、路线、分数、校验结果和模型信息。AI Revision 通过 `POST /api/trips/:tripId/plans/:planId/revise` 创建新的 PlanVersion，并把原方案标记为 `superseded`。
+
 ```bash
 npm run db:generate
 npm run db:migrate
 npm run db:seed
+npm run seed:demo
 ```
 
-`db:migrate` 需要可用的 PostgreSQL 和 `DATABASE_URL`。当前没有数据库时，`/demo` 仍会回落到 seed/localStorage 状态运行；但真实偏好链、Profile 持久化和数据库端到端测试需要 PostgreSQL。
+`db:seed` 会保证 Fresh Demo 和 Quick Demo 都存在；`seed:demo` 会先清理这两个固定 Demo Room，再按 seed facts 和确定性派生结果重建，并输出 `clearing trip / creating trip / creating members / creating places / creating evidence / deriving signals / generating member profiles / generating room profiles` 等进度日志。`db:migrate` 需要可用的 PostgreSQL 和 `DATABASE_URL`。当前没有数据库时，`/demo` 仍会回落到 seed/localStorage 状态运行；但真实偏好链、Profile 持久化、确定性 reset 和数据库端到端测试需要 PostgreSQL。

@@ -1,4 +1,4 @@
-import type { MemberSignal } from "@/lib/types";
+import type { MemberSignal, PlanVariant } from "@/lib/types";
 
 export const MODEL_PROVIDER_NAME = "mock";
 export const MODEL_PROVIDER_VERSION = "mock-preference-v1";
@@ -60,6 +60,19 @@ export interface RoomPlaceSummaryInput {
   memberStanceCount: number;
 }
 
+export interface TravelPlanningPromptInput {
+  trip: unknown;
+  members: unknown[];
+  candidatePlaces: unknown[];
+  roomPlaceProfiles: unknown[];
+  memberPlaceProfiles: unknown[];
+  constraints: unknown[];
+  keyEvidence: unknown[];
+  relations: unknown[];
+  existingPlan?: PlanVariant;
+  revisionInstruction?: string;
+}
+
 export interface ModelProvider {
   name: string;
   version: string;
@@ -69,6 +82,8 @@ export interface ModelProvider {
   }>;
   summarizeMemberPlace(input: MemberPlaceSummaryInput): Promise<string>;
   summarizeRoomPlace(input: RoomPlaceSummaryInput): Promise<string>;
+  generateTravelPlans(input: TravelPlanningPromptInput): Promise<PlanVariant[]>;
+  reviseTravelPlan(input: TravelPlanningPromptInput): Promise<PlanVariant[]>;
 }
 
 export class MockModelProvider implements ModelProvider {
@@ -150,9 +165,222 @@ export class MockModelProvider implements ModelProvider {
 
     return `${input.placeName ? `${input.placeName}：` : ""}${positive}${concerns}。`;
   }
+
+  async generateTravelPlans(input: TravelPlanningPromptInput) {
+    const { generateJapanPlanVariants } = await import("@/lib/plans/generator");
+    const trip = input.trip as { id?: string; tripDurationDays?: number } | undefined;
+    return generateJapanPlanVariants({
+      tripId: trip?.id ?? "demo-japan-quick",
+      totalDays: trip?.tripDurationDays ?? 7,
+      basedOnSignalIds: keySignalIds(input)
+    });
+  }
+
+  async reviseTravelPlan(input: TravelPlanningPromptInput) {
+    const { generateJapanPlanVariants } = await import("@/lib/plans/generator");
+    const trip = input.trip as { id?: string; tripDurationDays?: number } | undefined;
+    return generateJapanPlanVariants({
+      tripId: trip?.id ?? "demo-japan-quick",
+      totalDays: trip?.tripDurationDays ?? 7,
+      basedOnSignalIds: keySignalIds(input),
+      parentPlanId: input.existingPlan?.id
+    });
+  }
 }
 
-export const modelProvider: ModelProvider = new MockModelProvider();
+export class DeepSeekModelProvider implements ModelProvider {
+  name = "deepseek";
+  version = process.env.DEEPSEEK_MODEL || process.env.MODEL_NAME || "deepseek-chat";
+
+  private readonly baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
+  private readonly apiKey = process.env.DEEPSEEK_API_KEY || process.env.MODEL_API_KEY;
+
+  async analyzeEvidence(evidence: EvidenceForAnalysis) {
+    const fallback = new MockModelProvider();
+    const seeded = await fallback.analyzeEvidence(evidence);
+    if (!this.apiKey) return seeded;
+
+    const content = await this.chatJson({
+      system:
+        "你是 TripRoom 的偏好抽取服务。只返回 JSON，不要返回 Markdown。保持原始 evidence 可追溯，不要编造地点。",
+      user: JSON.stringify({
+        task: "analyze_evidence",
+        evidence,
+        requiredShape: {
+          signals: [
+            {
+              targetType: "node|material|plan",
+              targetId: "string",
+              signalType: "positive|neutral|negative|must_go|hard_reject|concern|want_to_know|questioned",
+              polarity: -1,
+              intensity: 3,
+              reason: "string",
+              aspect: "string",
+              intent: "want_to_go|avoid|learn_more|must_go|hard_reject|condition|concern|neutral",
+              conditionText: "string optional",
+              constraintCandidate: false,
+              extractedAttributes: [{ key: "string", polarity: 1, text: "string" }]
+            }
+          ],
+          constraints: [
+            {
+              targetType: "trip|node|material|plan",
+              targetId: "string optional",
+              constraintType: "budget|date|duration|mobility|pace|must_go|hard_reject|route_condition|other",
+              severity: "soft|strong|hard",
+              polarity: 0,
+              priorityScore: 0.8,
+              confidence: 0.8,
+              summary: "string",
+              conditionText: "string optional",
+              structuredValue: {}
+            }
+          ]
+        },
+        fallbackSignals: seeded.signals,
+        fallbackConstraints: seeded.constraints
+      })
+    });
+
+    return {
+      signals: Array.isArray(content.signals) ? content.signals.map(normalizeSignalDraft).filter(Boolean) as SignalDraft[] : seeded.signals,
+      constraints: Array.isArray(content.constraints) ? content.constraints.map(normalizeConstraintDraft).filter(Boolean) as ConstraintDraft[] : seeded.constraints
+    };
+  }
+
+  async summarizeMemberPlace(input: MemberPlaceSummaryInput) {
+    return new MockModelProvider().summarizeMemberPlace(input);
+  }
+
+  async summarizeRoomPlace(input: RoomPlaceSummaryInput) {
+    return new MockModelProvider().summarizeRoomPlace(input);
+  }
+
+  async generateTravelPlans(input: TravelPlanningPromptInput) {
+    return this.generatePlansWithTask("generate_candidate_plans", input);
+  }
+
+  async reviseTravelPlan(input: TravelPlanningPromptInput) {
+    return this.generatePlansWithTask("revise_candidate_plan", input);
+  }
+
+  private async generatePlansWithTask(task: string, input: TravelPlanningPromptInput) {
+    if (!this.apiKey) {
+      throw new Error("DeepSeek API key is not configured on the server.");
+    }
+
+    const content = await this.chatJson({
+      system:
+        "你是 TripRoom 的 TravelPlanningAgent。必须基于输入的 room/member/place/preference/constraint 数据生成可执行日本旅行候选方案。只返回 JSON，不要 Markdown，不要解释 JSON 外内容。",
+      user: JSON.stringify({
+        task,
+        instructions: [
+          "返回至少 2 个结构明显不同的候选方案，最多 3 个。",
+          "每个方案必须有 overview、完整 day-by-day itinerary、route nodeIds。",
+          "不要伪造实时酒店、航班、票价或天气；预算和交通只能写粗略估算。",
+          "尊重 hard constraints；如果存在取舍，在 gains/tradeoffs/unresolvedQuestions 里说明。",
+          "id/version/score/validation 可以留空，后端会重新赋值和校验评分。"
+        ],
+        requiredJsonShape: {
+          plans: [
+            {
+              title: "string",
+              summary: "string",
+              totalDays: 7,
+              segments: [
+                {
+                  nodeId: "tokyo",
+                  name: "东京",
+                  days: 4,
+                  representativeNodeIds: ["asakusa-ueno"],
+                  experienceSummary: "string",
+                  stayArea: "string"
+                }
+              ],
+              includedNodeIds: ["tokyo"],
+              excludedHighlights: ["string"],
+              mobilityText: "string",
+              budgetText: "string",
+              gains: ["string"],
+              tradeoffs: ["string"],
+              unresolvedQuestions: ["string"],
+              itinerary: [
+                {
+                  day: 1,
+                  city: "东京",
+                  area: "浅草 / 上野",
+                  morning: "string",
+                  afternoon: "string",
+                  evening: "string",
+                  stayArea: "东京",
+                  placeNodeIds: ["asakusa-ueno"],
+                  transport: "string",
+                  costText: "string",
+                  imageNodeId: "asakusa-ueno"
+                }
+              ],
+              route: {
+                nodeIds: ["tokyo", "asakusa-ueno"],
+                summary: "string"
+              },
+              changeSummary: ["string"]
+            }
+          ]
+        },
+        context: input
+      })
+    });
+
+    if (!Array.isArray(content.plans)) {
+      throw new Error("DeepSeek planning response did not include plans[].");
+    }
+
+    return content.plans.map(normalizePlanDraft).filter(Boolean) as PlanVariant[];
+  }
+
+  private async chatJson(input: { system: string; user: string }) {
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`
+      },
+      body: JSON.stringify({
+        model: this.version,
+        messages: [
+          { role: "system", content: input.system },
+          { role: "user", content: input.user }
+        ],
+        temperature: 0.35,
+        response_format: { type: "json_object" }
+      })
+    });
+
+    if (!response.ok) {
+      const detail = await response.text();
+      throw new Error(`DeepSeek request failed: ${response.status} ${detail.slice(0, 240)}`);
+    }
+
+    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const text = payload.choices?.[0]?.message?.content;
+    if (!text) throw new Error("DeepSeek response did not include message content.");
+
+    return JSON.parse(stripJsonFence(text)) as Record<string, unknown>;
+  }
+}
+
+export const modelProvider: ModelProvider = createModelProvider();
+
+function createModelProvider(): ModelProvider {
+  if (process.env.NODE_ENV === "test" && process.env.FORCE_REAL_MODEL_PROVIDER !== "1") {
+    return new MockModelProvider();
+  }
+  const configured = (process.env.MODEL_PROVIDER || process.env.AI_ADAPTER_MODE || "").toLowerCase();
+  if (configured === "deepseek" || (!configured && process.env.DEEPSEEK_API_KEY)) {
+    return new DeepSeekModelProvider();
+  }
+  return new MockModelProvider();
+}
 
 function isSignalTargetType(targetType: string): targetType is MemberSignal["targetType"] {
   return targetType === "node" || targetType === "material" || targetType === "plan";
@@ -419,4 +647,158 @@ function extractTripConstraints(evidence: EvidenceForAnalysis): ConstraintDraft[
   }
 
   return constraints;
+}
+
+function normalizeSignalDraft(value: unknown): SignalDraft | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const targetType = record.targetType === "material" || record.targetType === "plan" ? record.targetType : "node";
+  const targetId = typeof record.targetId === "string" ? record.targetId : undefined;
+  if (!targetId) return undefined;
+  return {
+    targetType,
+    targetId,
+    signalType: typeof record.signalType === "string" ? record.signalType as SignalDraft["signalType"] : "want_to_know",
+    polarity: polarity(record.polarity),
+    intensity: intensity(record.intensity),
+    reason: typeof record.reason === "string" ? record.reason : undefined,
+    aspect: typeof record.aspect === "string" ? record.aspect : undefined,
+    intent: typeof record.intent === "string" ? record.intent : undefined,
+    conditionText: typeof record.conditionText === "string" ? record.conditionText : undefined,
+    constraintCandidate: record.constraintCandidate === true,
+    extractedAttributes: Array.isArray(record.extractedAttributes)
+      ? record.extractedAttributes
+          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+          .map((item) => ({
+            key: typeof item.key === "string" ? item.key : "overall",
+            polarity: polarity(item.polarity),
+            text: typeof item.text === "string" ? item.text : ""
+          }))
+          .filter((item) => item.text)
+      : undefined
+  };
+}
+
+function normalizeConstraintDraft(value: unknown): ConstraintDraft | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.summary !== "string") return undefined;
+  return {
+    targetType: typeof record.targetType === "string" ? record.targetType as ConstraintDraft["targetType"] : undefined,
+    targetId: typeof record.targetId === "string" ? record.targetId : undefined,
+    constraintType: typeof record.constraintType === "string" ? record.constraintType : "other",
+    severity: record.severity === "hard" || record.severity === "soft" ? record.severity : "strong",
+    polarity: record.polarity == null ? undefined : polarity(record.polarity),
+    priorityScore: typeof record.priorityScore === "number" ? record.priorityScore : undefined,
+    confidence: typeof record.confidence === "number" ? record.confidence : undefined,
+    summary: record.summary,
+    conditionText: typeof record.conditionText === "string" ? record.conditionText : undefined,
+    structuredValue: record.structuredValue && typeof record.structuredValue === "object" && !Array.isArray(record.structuredValue)
+      ? record.structuredValue as Record<string, unknown>
+      : undefined
+  };
+}
+
+function normalizePlanDraft(value: unknown): PlanVariant | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const title = typeof record.title === "string" ? record.title : undefined;
+  if (!title) return undefined;
+  return {
+    id: "",
+    tripId: "",
+    version: 1,
+    title,
+    summary: typeof record.summary === "string" ? record.summary : "基于当前团队偏好生成的候选方案。",
+    status: "draft",
+    totalDays: typeof record.totalDays === "number" ? record.totalDays : undefined,
+    segments: arrayOfRecords(record.segments).map((segment) => ({
+      nodeId: stringValue(segment.nodeId, "tokyo"),
+      name: stringValue(segment.name, stringValue(segment.nodeId, "东京")),
+      days: numberValue(segment.days, 1),
+      representativeNodeIds: stringArray(segment.representativeNodeIds),
+      experienceSummary: stringValue(segment.experienceSummary, ""),
+      stayArea: typeof segment.stayArea === "string" ? segment.stayArea : undefined
+    })),
+    includedNodeIds: stringArray(record.includedNodeIds),
+    excludedHighlights: stringArray(record.excludedHighlights),
+    mobilityText: stringValue(record.mobilityText, "移动强度为粗略估算，以实际交通查询为准。"),
+    budgetText: stringValue(record.budgetText, "粗略预算估算，未接入实时价格。"),
+    budgetIsEstimate: true,
+    gains: stringArray(record.gains),
+    tradeoffs: stringArray(record.tradeoffs),
+    basedOnSignalIds: [],
+    unresolvedQuestions: stringArray(record.unresolvedQuestions),
+    parentPlanId: undefined,
+    changeSummary: stringArray(record.changeSummary),
+    createdAt: new Date().toISOString(),
+    itinerary: arrayOfRecords(record.itinerary).map((day, index) => ({
+      day: numberValue(day.day, index + 1),
+      city: stringValue(day.city, ""),
+      area: typeof day.area === "string" ? day.area : undefined,
+      morning: stringValue(day.morning, ""),
+      afternoon: stringValue(day.afternoon, ""),
+      evening: stringValue(day.evening, ""),
+      stayArea: stringValue(day.stayArea, stringValue(day.city, "")),
+      placeNodeIds: stringArray(day.placeNodeIds),
+      transport: stringValue(day.transport, "市内交通 / 铁路，具体以实际查询为准。"),
+      costText: stringValue(day.costText, "粗略估算"),
+      imageNodeId: typeof day.imageNodeId === "string" ? day.imageNodeId : undefined
+    })),
+    route: record.route && typeof record.route === "object"
+      ? {
+          nodeIds: stringArray((record.route as Record<string, unknown>).nodeIds),
+          summary: stringValue((record.route as Record<string, unknown>).summary, "")
+        }
+      : undefined
+  };
+}
+
+function keySignalIds(input: TravelPlanningPromptInput) {
+  return Array.isArray(input.roomPlaceProfiles)
+    ? input.roomPlaceProfiles
+        .flatMap((profile) => {
+          if (!profile || typeof profile !== "object") return [];
+          const ids = (profile as Record<string, unknown>).topSignalIds;
+          return Array.isArray(ids) ? ids : [];
+        })
+        .filter((id): id is string => typeof id === "string")
+        .slice(0, 24)
+    : [];
+}
+
+function stripJsonFence(text: string) {
+  return text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+}
+
+function polarity(value: unknown): -1 | 0 | 1 {
+  if (typeof value !== "number") return 0;
+  if (value > 0) return 1;
+  if (value < 0) return -1;
+  return 0;
+}
+
+function intensity(value: unknown): MemberSignal["intensity"] {
+  if (typeof value !== "number") return 1;
+  if (value <= 0) return 0;
+  if (value >= 5) return 5;
+  return Math.round(value) as MemberSignal["intensity"];
+}
+
+function arrayOfRecords(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+    : [];
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function stringValue(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function numberValue(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }

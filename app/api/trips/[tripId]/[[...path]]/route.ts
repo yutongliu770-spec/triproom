@@ -6,7 +6,7 @@ import { evidenceService } from "@/lib/preferences/evidence-service";
 import { constraintService } from "@/lib/preferences/constraint-service";
 import { preferenceReducer } from "@/lib/preferences/preference-reducer";
 import { getPreferenceState } from "@/lib/preferences/state";
-import { generateJapanPlanVariants } from "@/lib/plans/generator";
+import { travelPlanningService } from "@/lib/plans/service";
 import { reactionToSignal } from "@/lib/signals/reactions";
 import type { Material, ReactionType } from "@/lib/types";
 
@@ -19,7 +19,7 @@ interface RouteContext {
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { tripId, path = [] } = await context.params;
-  const room = await getDemoRoom();
+  const room = await getDemoRoom(tripId);
   const route = path.join("/");
 
   if (!route) return NextResponse.json(room);
@@ -43,7 +43,14 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       roomNodeStates: room.roomNodeStates
     });
   }
-  if (route === "plans") return NextResponse.json({ plans: room.plans });
+  if (route === "plans") {
+    try {
+      await ensureDemoRoomPersisted(tripId);
+      return NextResponse.json({ plans: await travelPlanningService.listPlans(tripId) });
+    } catch {
+      return NextResponse.json({ plans: room.plans });
+    }
+  }
 
   return NextResponse.json({ error: "Not found" }, { status: 404 });
 }
@@ -52,7 +59,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const { tripId, path = [] } = await context.params;
   const route = path.join("/");
   const body = await safeJson(request);
-  const room = await getDemoRoom();
+  const room = await getDemoRoom(tripId);
   await ensureDemoRoomPersisted(tripId);
 
   if (route === "join") {
@@ -184,19 +191,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (route === "plans/generate") {
-    return NextResponse.json({
-      plans: generateJapanPlanVariants({ tripId, totalDays: room.trip.tripDurationDays })
-    });
+    return NextResponse.json(await travelPlanningService.generatePlans({
+      tripId,
+      memberId: typeof body.memberId === "string" ? body.memberId : undefined
+    }));
   }
 
   if (route.endsWith("/revise")) {
-    return NextResponse.json({
-      plans: generateJapanPlanVariants({
-        tripId,
-        totalDays: room.trip.tripDurationDays,
-        parentPlanId: path[path.length - 2]
-      })
-    });
+    return NextResponse.json(await travelPlanningService.revisePlan({
+      tripId,
+      planId: path[path.length - 2],
+      memberId: typeof body.memberId === "string" ? body.memberId : undefined,
+      instruction:
+        typeof body.instruction === "string" && body.instruction.trim()
+          ? body.instruction.trim()
+          : "第二天太满了，轻松一点"
+    }));
   }
 
   if (route === "ai/process-event") {

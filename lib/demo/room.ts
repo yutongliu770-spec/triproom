@@ -4,8 +4,8 @@ import { getPersistedRoomActivity } from "@/lib/preferences/state";
 import { travelDataService } from "@/lib/travel/service";
 import type { DemoRoomData } from "@/lib/types";
 
-export async function getDemoRoom(): Promise<DemoRoomData> {
-  const seed = getMockDemoSeed();
+export async function getDemoRoom(tripId?: string): Promise<DemoRoomData> {
+  const seed = getMockDemoSeed(tripId);
   const [nodes, relations, initialCards] = await Promise.all([
     travelDataService.getAllNodes(),
     travelDataService.getAllRelations(),
@@ -20,19 +20,21 @@ export async function getDemoRoom(): Promise<DemoRoomData> {
     messages: persisted?.messages.length ? persisted.messages : seed.messages,
     materials: persisted?.materials ?? seed.materials,
     signals: persisted?.signals ?? seed.signals,
-    plans: seed.plans,
+    plans: persisted?.plans ?? seed.plans,
     roomNodeStates: persisted?.roomNodeStates.length ? persisted.roomNodeStates : seed.roomNodeStates,
-    placeOpinions: persisted?.placeOpinions,
-    evidences: persisted?.evidences,
-    constraints: persisted?.constraints,
-    memberPlaceProfiles: persisted?.memberPlaceProfiles,
-    roomPlaceProfiles: persisted?.roomPlaceProfiles,
-    initialCards
+    placeOpinions: persisted?.placeOpinions ?? seed.placeOpinions,
+    evidences: persisted?.evidences ?? seed.evidences,
+    constraints: persisted?.constraints ?? seed.constraints,
+    memberPlaceProfiles: persisted?.memberPlaceProfiles ?? seed.memberPlaceProfiles,
+    roomPlaceProfiles: persisted?.roomPlaceProfiles ?? seed.roomPlaceProfiles,
+    initialCards,
+    initialActiveMemberIds: seed.initialActiveMemberIds,
+    persistenceMode: persisted ? "database" : "seed_fallback"
   };
 }
 
-export async function getDemoTrip() {
-  const room = await getDemoRoom();
+export async function getDemoTrip(tripId?: string) {
+  const room = await getDemoRoom(tripId);
   return room.trip;
 }
 

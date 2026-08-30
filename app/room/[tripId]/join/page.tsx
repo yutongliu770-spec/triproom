@@ -2,8 +2,13 @@ import Link from "next/link";
 import { ArrowRight, UsersRound } from "lucide-react";
 import { getDemoTrip } from "@/lib/demo/room";
 
-export default async function JoinRoomPage() {
-  const trip = await getDemoTrip();
+interface JoinRoomPageProps {
+  params: Promise<{ tripId: string }>;
+}
+
+export default async function JoinRoomPage({ params }: JoinRoomPageProps) {
+  const { tripId } = await params;
+  const trip = await getDemoTrip(tripId);
 
   return (
     <main className="grid min-h-screen place-items-center px-5">

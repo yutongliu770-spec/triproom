@@ -21,6 +21,7 @@ import type {
   Material,
   MemberPlaceState,
   MemberSignal,
+  PlanVariant,
   RoomNodeState
 } from "@/lib/types";
 import {
@@ -50,6 +51,7 @@ export function ExplorationPanel({
   currentMemberId,
   memberPlaceStates,
   activePlaceId,
+  activePlan,
   onOpenPlace
 }: {
   tripId: string;
@@ -63,6 +65,7 @@ export function ExplorationPanel({
   currentMemberId: string;
   memberPlaceStates: MemberPlaceState[];
   activePlaceId?: string;
+  activePlan?: PlanVariant;
   onOpenPlace: (nodeId: string, tab?: "overview" | "opinions" | "materials") => void;
 }) {
   const [mapCenter, setMapCenter] = useState<GeoPoint>(JAPAN_CENTER);
@@ -91,7 +94,10 @@ export function ExplorationPanel({
   );
   const unresolvedMentions = findUnresolvedPlaceMentions(messages, nodes);
   const activePlace = activePlaceId ? nodes.find((node) => node.id === activePlaceId) : undefined;
-  const mapPlaces = mergeMapPlaces(visiblePlaces, activePlace).filter((node) => Boolean(node.geo));
+  const planNodes = activePlan?.route?.nodeIds
+    .map((nodeId) => nodes.find((node) => node.id === nodeId))
+    .filter((node): node is DestinationNode => Boolean(node?.geo)) ?? [];
+  const mapPlaces = (activePlan ? mergeUniqueNodes([...visiblePlaces, ...planNodes]) : mergeMapPlaces(visiblePlaces, activePlace)).filter((node) => Boolean(node.geo));
 
   useEffect(() => {
     const node = nodes.find((item) => item.id === focusNodeId);
@@ -177,8 +183,17 @@ export function ExplorationPanel({
           onUnreadClick={(node) => {
             onOpenPlace(node.id, "opinions");
           }}
+          activePlan={activePlan}
         />
       </section>
+
+      {activePlan && (
+        <section className="mt-4 rounded-2xl border border-coral/20 bg-coral/10 p-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-coral">PLAN MODE</div>
+          <h3 className="mt-1 text-sm font-semibold text-ink">{activePlan.title}</h3>
+          <p className="mt-1 text-xs leading-5 text-ink/60">{activePlan.route?.summary ?? activePlan.mobilityText}</p>
+        </section>
+      )}
 
       {unresolvedMentions.length > 0 && (
         <section className="mt-5 rounded-2xl border border-dashed border-ink/15 bg-white p-4">
@@ -212,7 +227,8 @@ function GeoMap({
   activePlaceId,
   onViewChange,
   onPlaceClick,
-  onUnreadClick
+  onUnreadClick,
+  activePlan
 }: {
   center: GeoPoint;
   zoom: number;
@@ -227,6 +243,7 @@ function GeoMap({
   onViewChange: (view: { center: GeoPoint; zoom: number }) => void;
   onPlaceClick: (node: DestinationNode) => void;
   onUnreadClick: (node: DestinationNode) => void;
+  activePlan?: PlanVariant;
 }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
@@ -259,6 +276,23 @@ function GeoMap({
       return new Set(ids);
     },
     [activePlaceId, center, places, semanticLevel, size, states, zoom]
+  );
+  const routePoints = useMemo(
+    () =>
+      (activePlan?.route?.nodeIds ?? [])
+        .map((nodeId, index) => {
+          const node = allNodes.find((item) => item.id === nodeId);
+          if (!node?.geo) return undefined;
+          const projected = project({ latitude: node.geo.latitude, longitude: node.geo.longitude }, zoom);
+          return {
+            node,
+            index,
+            left: projected.x - centerPoint.x + size.width / 2,
+            top: projected.y - centerPoint.y + size.height / 2
+          };
+        })
+        .filter((point): point is NonNullable<typeof point> => Boolean(point)),
+    [activePlan?.route?.nodeIds, allNodes, centerPoint.x, centerPoint.y, size.height, size.width, zoom]
   );
 
   useEffect(() => {
@@ -385,6 +419,20 @@ function GeoMap({
 
       <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,253,248,0.04),rgba(23,33,31,0.08))]" />
 
+      {routePoints.length >= 2 && (
+        <svg className="pointer-events-none absolute inset-0 z-[8]" aria-hidden="true">
+          <polyline
+            points={routePoints.map((point) => `${point.left},${point.top}`).join(" ")}
+            fill="none"
+            stroke="#f26b5e"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="8 7"
+          />
+        </svg>
+      )}
+
       {places.map((node) => {
         if (!node.geo) return null;
         const state = states.get(node.id);
@@ -468,8 +516,25 @@ function GeoMap({
         );
       })}
 
+      {routePoints.map((point) => (
+        <button
+          key={`${activePlan?.id}-${point.node.id}-${point.index}`}
+          type="button"
+          className="focus-ring absolute z-[25] grid size-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-coral text-xs font-bold text-white shadow-[0_10px_24px_rgba(23,33,31,0.22)]"
+          style={{ left: point.left, top: point.top }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPlaceClick(point.node);
+          }}
+          aria-label={`方案第 ${point.index + 1} 个地点：${point.node.canonicalName}`}
+        >
+          {point.index + 1}
+        </button>
+      ))}
+
       <div className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-medium text-ink/55">
-        OpenStreetMap
+        {activePlan ? "PLAN MODE · OpenStreetMap" : "OpenStreetMap"}
       </div>
       <div className="absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-medium text-ink/55">
         真实经纬度 · Zoom {zoom}
@@ -921,6 +986,15 @@ function mergeMapPlaces(places: DestinationNode[], activePlace?: DestinationNode
   if (!activePlace) return places;
   if (places.some((place) => place.id === activePlace.id)) return places;
   return [...places, activePlace];
+}
+
+function mergeUniqueNodes(nodes: DestinationNode[]) {
+  const seen = new Set<string>();
+  return nodes.filter((node) => {
+    if (seen.has(node.id)) return false;
+    seen.add(node.id);
+    return true;
+  });
 }
 
 function isGeoPointInViewport(

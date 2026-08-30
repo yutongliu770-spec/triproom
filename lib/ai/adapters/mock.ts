@@ -1,12 +1,11 @@
-import type { TravelCard } from "@/lib/types";
+import type { PlanVariant, TravelCard } from "@/lib/types";
 import type { EventAnalysis, InterventionDecision } from "@/lib/ai/schemas";
-import { generateJapanPlanVariants } from "@/lib/plans/generator";
 import type { TravelDataService } from "@/lib/travel/service";
 
 export interface AIGenerationResult {
   messageText?: string;
   cardBatch?: TravelCard[];
-  plans?: ReturnType<typeof generateJapanPlanVariants>;
+  plans?: PlanVariant[];
   proposedFollowUp?: string;
 }
 
@@ -127,8 +126,7 @@ export class MockLLMAdapter {
     if (decision.mode === "offer_plan") {
       return {
         messageText:
-          "你们现在已经有两个比较清楚的路线方向了。我先整理成两版结构方案，重点看得到什么、放弃什么，而不是直接给唯一答案。",
-        plans: generateJapanPlanVariants({ tripId: input.tripId, totalDays: 7 })
+          "你们现在已经有比较清楚的路线方向了。可以进入「规划」生成候选方案，系统会读取当前 Room 偏好并做校验评分。"
       };
     }
 
@@ -141,7 +139,7 @@ export class MockLLMAdapter {
     if (decision.mode === "supply_cards") {
       return {
         messageText:
-          "如果现在只确定想去日本，可以先从具体地点建立感觉。我先混合京都、关西、东京周边和富士山方向，之后可以聚焦某个城市，也可以换一组完全不同的小簇。",
+          "好呀，目前有什么想法吗？如果说没有的话，可以在中间的探索区域里自行探索。",
         cardBatch: await this.travelData.getCardsForNodes(decision.cardNodeIds ?? [])
       };
     }

@@ -11,7 +11,6 @@ import {
 import { focusNode } from "@/lib/graph/exploration";
 import { detectMentionedPlaceIds } from "@/lib/graph/place-state";
 import { reactionToSignal, summarizeSignals } from "@/lib/signals/reactions";
-import { generateJapanPlanVariants } from "@/lib/plans/generator";
 import { extractFirstUrl, isDouyinContent, isXiaohongshuContent } from "@/lib/travel/social-discovery";
 import type {
   ChatMessage,
@@ -72,8 +71,22 @@ interface PreferencePayload {
   roomNodeStates?: RoomNodeState[];
 }
 
+const INTRO_AI_MESSAGE_TEXT =
+  "好呀，目前有什么想法吗？如果说没有的话，可以在中间的探索区域里自行探索。";
+const OLD_INTRO_AI_MESSAGE_TEXT =
+  "可以，先不用急着定天数或路线。我先按日本下面的几个区域放一些具体地点，大家看到有感觉的直接点或说一句就行。";
+
 export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
-  const [messages, setMessages] = useState(initialRoom.messages);
+  const initialMemberId = initialRoom.trip.members[0]?.id ?? "";
+  const initialJapanCards = createJapanScopeCards({
+    tripId: initialRoom.trip.id,
+    memberId: initialMemberId,
+    nodes: initialRoom.nodes,
+    relations: initialRoom.relations,
+    signals: initialRoom.signals,
+    roomNodeStates: initialRoom.roomNodeStates
+  });
+  const [messages, setMessages] = useState(() => normalizePersistedMessages(initialRoom.messages));
   const [signals, setSignals] = useState<MemberSignal[]>(initialRoom.signals);
   const [materials, setMaterials] = useState<Material[]>(initialRoom.materials);
   const [plans, setPlans] = useState<PlanVariant[]>(initialRoom.plans);
@@ -97,25 +110,27 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
   const [currentFocusNodeId, setCurrentFocusNodeId] = useState(
     initialRoom.trip.currentFocusNodeId ?? "japan"
   );
-  const [activeCards, setActiveCards] = useState<TravelCard[]>(initialRoom.initialCards);
+  const [activeCards, setActiveCards] = useState<TravelCard[]>(initialJapanCards);
   const [activeCardIndex, setActiveCardIndex] = useState(0);
   const [memberExploreStates, setMemberExploreStates] = useState<MemberExploreState[]>(() => [
     {
       ...createInitialExploreState({
         tripId: initialRoom.trip.id,
-        memberId: initialRoom.trip.members[0]?.id ?? "",
-        cards: initialRoom.initialCards
+        memberId: initialMemberId,
+        cards: initialJapanCards
       }),
       explorationPathNodeIds: ["japan"],
       searchQuery: ""
     }
   ]);
   const [cardsByNodeId, setCardsByNodeId] = useState<Record<string, TravelCard>>(() =>
-    cardsToRecord(initialRoom.initialCards)
+    cardsToRecord(initialJapanCards)
   );
-  const [activeMemberIds, setActiveMemberIds] = useState<string[]>([
-    initialRoom.trip.members[0]?.id ?? ""
-  ]);
+  const [activeMemberIds, setActiveMemberIds] = useState<string[]>(
+    initialRoom.initialActiveMemberIds?.length
+      ? initialRoom.initialActiveMemberIds
+      : [initialRoom.trip.members[0]?.id ?? ""]
+  );
   const [workspaceMode, setWorkspaceMode] = useState<PlaceWorkspaceMode>("explore");
   const [mobilePanel, setMobilePanel] = useState<"group" | "workspace" | "map" | "planning">(
     "workspace"
@@ -126,6 +141,9 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
   const [currentMemberId, setCurrentMemberId] = useState(initialRoom.trip.members[0]?.id ?? "");
   const [discussionPlaceId, setDiscussionPlaceId] = useState<string | undefined>();
   const [summarySent, setSummarySent] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | undefined>();
+  const [planningStatus, setPlanningStatus] = useState<"idle" | "generating" | "revising">("idle");
+  const [planningError, setPlanningError] = useState<string | undefined>();
   const syncSourceId = useMemo(() => crypto.randomUUID(), []);
   const applyingRemoteSnapshot = useRef(false);
 
@@ -157,7 +175,8 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
       searchQuery: ""
     };
   const activeExplorePlaceId = activeCards[activeCardIndex]?.nodeId;
-  const activeMapPlaceId = selectedPlaceId ?? activeExplorePlaceId;
+  const selectedPlan = selectedPlanId ? plans.find((plan) => plan.id === selectedPlanId) : undefined;
+  const activeMapPlaceId = selectedPlaceId ?? selectedPlan?.route?.nodeIds[0] ?? activeExplorePlaceId;
   const currentExplorationPathNodeIds =
     currentExploreState.explorationPathNodeIds?.filter((nodeId) =>
       nodes.some((node) => node.id === nodeId)
@@ -171,6 +190,8 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     );
 
   useEffect(() => {
+    if (initialRoom.persistenceMode === "database") return;
+
     const stored = window.localStorage.getItem(roomStorageKey(initialRoom.trip.id));
     if (!stored) return;
 
@@ -181,7 +202,7 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     }
     // Loading persisted room state should only happen on first mount for this room.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialRoom.trip.id]);
+  }, [initialRoom.persistenceMode, initialRoom.trip.id]);
 
   useEffect(() => {
     void refreshPreferenceState();
@@ -257,8 +278,46 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
   }, [activeCards.length]);
 
   function applySnapshot(snapshot: RoomSnapshot) {
+    const nextActiveMemberIds = snapshot.activeMemberIds?.filter(Boolean).length ? snapshot.activeMemberIds : [
+      initialRoom.trip.members[0]?.id ?? ""
+    ];
+    const currentSnapshotMemberId = nextActiveMemberIds.includes(currentMember.id)
+      ? currentMember.id
+      : nextActiveMemberIds[0] ?? initialMemberId;
+    const snapshotExploreStates = snapshot.memberExploreStates ?? [];
+    const currentSnapshotExploreState = snapshotExploreStates.find(
+      (state) => state.memberId === currentSnapshotMemberId
+    );
+    const shouldRestoreJapanScopeCards = isJapanOnlyPath(
+      currentSnapshotExploreState?.explorationPathNodeIds
+    );
+    const normalizedExploreStates = shouldRestoreJapanScopeCards
+      ? snapshotExploreStates.map((state) =>
+          state.memberId === currentSnapshotMemberId
+            ? {
+                ...state,
+                currentScopeNodeId: undefined,
+                currentClusterNodeId: undefined,
+                currentCardIndex: 0,
+                explorationPathNodeIds: ["japan"]
+              }
+            : state
+        )
+      : snapshotExploreStates;
+    const restoredActiveCards = shouldRestoreJapanScopeCards
+      ? createJapanScopeCards({
+          tripId: initialRoom.trip.id,
+          memberId: currentSnapshotMemberId,
+          nodes,
+          relations,
+          signals: snapshot.signals,
+          roomNodeStates: snapshot.roomNodeStates
+        })
+      : snapshot.activeCards;
+    const restoredActiveCardIndex = shouldRestoreJapanScopeCards ? 0 : snapshot.activeCardIndex ?? 0;
+
     applyingRemoteSnapshot.current = true;
-    setMessages(snapshot.messages);
+    setMessages(normalizePersistedMessages(snapshot.messages));
     setSignals(snapshot.signals);
     setMaterials(snapshot.materials);
     setPlans(snapshot.plans);
@@ -269,16 +328,17 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     setRoomNodeStates(snapshot.roomNodeStates);
     setPlaceOpinions(snapshot.placeOpinions ?? []);
     setMemberPlaceStates(snapshot.memberPlaceStates ?? []);
-    setCurrentFocusNodeId(snapshot.currentFocusNodeId);
-    setActiveCards(snapshot.activeCards);
+    setCurrentFocusNodeId(shouldRestoreJapanScopeCards ? "japan" : snapshot.currentFocusNodeId);
+    setActiveCards(restoredActiveCards);
     setActiveCardIndex(
-      Math.min(snapshot.activeCardIndex ?? 0, Math.max(0, snapshot.activeCards.length - 1))
+      Math.min(restoredActiveCardIndex, Math.max(0, restoredActiveCards.length - 1))
     );
-    setMemberExploreStates(snapshot.memberExploreStates ?? []);
-    setCardsByNodeId(snapshot.cardsByNodeId ?? cardsToRecord(snapshot.activeCards));
-    setActiveMemberIds(snapshot.activeMemberIds?.filter(Boolean).length ? snapshot.activeMemberIds : [
-      initialRoom.trip.members[0]?.id ?? ""
-    ]);
+    setMemberExploreStates(normalizedExploreStates);
+    setCardsByNodeId({
+      ...(snapshot.cardsByNodeId ?? {}),
+      ...cardsToRecord(restoredActiveCards)
+    });
+    setActiveMemberIds(nextActiveMemberIds);
     window.setTimeout(() => {
       applyingRemoteSnapshot.current = false;
     }, 0);
@@ -657,17 +717,28 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     });
   }
 
-  function handleGeneratePlans() {
-    const nextPlans = generateJapanPlanVariants({
-      tripId: initialRoom.trip.id,
-      totalDays: initialRoom.trip.tripDurationDays,
-      basedOnSignalIds: signals.map((signal) => signal.id)
-    });
-    setPlans(nextPlans);
-    setWorkspaceMode("planning");
-    addAiMessage("我先把现在的方向整理成两版结构方案。重点看每版得到什么、放弃什么。", {
-      planIds: nextPlans.map((plan) => plan.id)
-    });
+  async function handleGeneratePlans() {
+    setPlanningStatus("generating");
+    setPlanningError(undefined);
+    try {
+      const response = await fetch(`/api/trips/${initialRoom.trip.id}/plans/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberId: currentMember.id })
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const payload = (await response.json()) as { plans: PlanVariant[] };
+      setPlans(payload.plans);
+      setSelectedPlanId(payload.plans[0]?.id);
+      setWorkspaceMode("planning");
+      addAiMessage("我按当前 Room 偏好和讨论生成了候选方案，并已完成规则校验和评分。", {
+        planIds: payload.plans.map((plan) => plan.id)
+      });
+    } catch (error) {
+      setPlanningError(error instanceof Error ? error.message : "生成方案失败");
+    } finally {
+      setPlanningStatus("idle");
+    }
   }
 
   function handlePlanComment(plan: PlanVariant, text: string) {
@@ -696,23 +767,35 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     ]);
   }
 
-  function handleRevisePlan(plan: PlanVariant) {
-    const revisedPlans = generateJapanPlanVariants({
-      tripId: initialRoom.trip.id,
-      totalDays: initialRoom.trip.tripDurationDays,
-      basedOnSignalIds: signals.map((signal) => signal.id),
-      parentPlanId: plan.id
-    });
-
-    setPlans((current) => [
-      ...current.map((item) => ({ ...item, status: "superseded" as const })),
-      ...revisedPlans
-    ]);
-    setWorkspaceMode("planning");
-    addAiMessage(
-      `我根据刚才的结构级反馈生成了新版方案。新版会明确标出与「${plan.title}」相比保留和压缩了什么。`,
-      { planIds: revisedPlans.map((item) => item.id) }
-    );
+  async function handleRevisePlan(plan: PlanVariant, instruction: string) {
+    setPlanningStatus("revising");
+    setPlanningError(undefined);
+    try {
+      const response = await fetch(`/api/trips/${initialRoom.trip.id}/plans/${plan.id}/revise`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          memberId: currentMember.id,
+          instruction: instruction.trim() || "第二天太满了，轻松一点"
+        })
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const payload = (await response.json()) as { plans: PlanVariant[] };
+      setPlans((current) => [
+        ...current.map((item) => item.id === plan.id ? { ...item, status: "superseded" as const } : item),
+        ...payload.plans
+      ]);
+      setSelectedPlanId(payload.plans[0]?.id ?? plan.id);
+      setWorkspaceMode("planning");
+      addAiMessage(
+        `我根据「${instruction.trim() || "第二天太满了，轻松一点"}」生成了新版方案，并重新校验评分。`,
+        { planIds: payload.plans.map((item) => item.id) }
+      );
+    } catch (error) {
+      setPlanningError(error instanceof Error ? error.message : "修订方案失败");
+    } finally {
+      setPlanningStatus("idle");
+    }
   }
 
   function handleMemberChange(member: Member) {
@@ -1124,11 +1207,7 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
               <ChatTimeline
                 trip={roomTrip}
                 messages={messages}
-                nodes={nodes}
-                cardsByNodeId={cardsByNodeId}
                 plans={plans}
-                signals={signals}
-                onOpenPlace={(nodeId) => openPlaceInWorkspace(nodeId)}
                 onOpenPlanning={() => {
                   setSelectedPlaceId(undefined);
                   setWorkspaceMode("planning");
@@ -1174,6 +1253,10 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
               memberPlaceStates={memberPlaceStates}
               roomNodeStates={roomNodeStates}
               plans={plans}
+              selectedPlanId={selectedPlanId}
+              planningStatus={planningStatus}
+              planningError={planningError}
+              onPlanSelect={setSelectedPlanId}
               onModeChange={(mode) => {
                 setWorkspaceMode(mode);
                 setSelectedPlaceId(undefined);
@@ -1222,6 +1305,7 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
               currentMemberId={currentMember.id}
               memberPlaceStates={memberPlaceStates}
               activePlaceId={activeMapPlaceId}
+              activePlan={selectedPlan}
               onOpenPlace={openPlaceInWorkspace}
             />
           </aside>
@@ -1232,21 +1316,20 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
 }
 
 function pathNodeIdsForNode(nodeId: string, nodes: DemoRoomData["nodes"]) {
-  const path: string[] = [];
-  let current = nodes.find((node) => node.id === nodeId);
+  const node = nodes.find((item) => item.id === nodeId);
+  if (!node) return ["japan"];
+  if (node.nodeType === "country") return [node.id];
 
-  while (current) {
-    path.unshift(current.id);
-    current = current.parentId ? nodes.find((node) => node.id === current?.parentId) : undefined;
-  }
+  const city = cityScopeForNode(node, nodes);
+  if (!city) return ["japan"];
 
-  return path.length ? path : ["japan"];
+  const country = countryScopeForNode(city, nodes);
+  return country ? [country.id, city.id] : [city.id];
 }
 
 function pathNodeIdsForExploreScope(nodeId: string, nodes: DemoRoomData["nodes"]) {
   const node = nodes.find((item) => item.id === nodeId);
   if (!node) return ["japan"];
-  if (isConcreteExploreNode(node)) return pathNodeIdsForNode(node.id, nodes);
 
   return pathNodeIdsForNode(node.id, nodes);
 }
@@ -1274,12 +1357,6 @@ function randomizeExplorationPath({
   );
   const nextNode = pickRandomItem(siblings);
   if (!nextNode) return pathNodeIds;
-
-  const shouldKeepChildDepth = levelIndex < pathNodeIds.length - 1;
-  if (shouldKeepChildDepth && !isConcreteExploreNode(nextNode)) {
-    const child = pickRandomItem(concreteDescendantsForRoom(nextNode.id, nodes, relations));
-    if (child) return pathNodeIdsForNode(child.id, nodes);
-  }
 
   return pathNodeIdsForNode(nextNode.id, nodes);
 }
@@ -1332,6 +1409,34 @@ function isClusterNode(node: DemoRoomData["nodes"][number]) {
   return node.nodeType === "city" || node.nodeType === "region";
 }
 
+function cityScopeForNode(
+  node: DemoRoomData["nodes"][number],
+  nodes: DemoRoomData["nodes"]
+) {
+  let current: DemoRoomData["nodes"][number] | undefined = node;
+
+  while (current) {
+    if (isClusterNode(current)) return current;
+    current = current.parentId ? nodes.find((item) => item.id === current?.parentId) : undefined;
+  }
+
+  return undefined;
+}
+
+function countryScopeForNode(
+  node: DemoRoomData["nodes"][number],
+  nodes: DemoRoomData["nodes"]
+) {
+  let current: DemoRoomData["nodes"][number] | undefined = node;
+
+  while (current) {
+    if (current.nodeType === "country") return current;
+    current = current.parentId ? nodes.find((item) => item.id === current?.parentId) : undefined;
+  }
+
+  return undefined;
+}
+
 function isConcreteExploreNode(node: DemoRoomData["nodes"][number]) {
   if (["district", "area", "attraction", "poi", "activity"].includes(node.nodeType)) return true;
   return (
@@ -1354,6 +1459,39 @@ function arraysEqual(left: string[], right: string[]) {
 
 function cardsToRecord(cards: TravelCard[]) {
   return Object.fromEntries(cards.map((card) => [card.nodeId, card]));
+}
+
+function createJapanScopeCards(input: {
+  tripId: string;
+  memberId: string;
+  nodes: DemoRoomData["nodes"];
+  relations: DemoRoomData["relations"];
+  signals: MemberSignal[];
+  roomNodeStates: RoomNodeState[];
+}) {
+  return recommendExploreBatch({
+    tripId: input.tripId,
+    memberId: input.memberId,
+    nodes: input.nodes,
+    relations: input.relations,
+    signals: input.signals,
+    roomNodeStates: input.roomNodeStates,
+    previousState: {
+      ...createInitialExploreState({
+        tripId: input.tripId,
+        memberId: input.memberId,
+        cards: []
+      }),
+      currentScopeNodeId: undefined,
+      currentClusterNodeId: undefined,
+      explorationPathNodeIds: ["japan"]
+    },
+    action: { type: "initial" }
+  }).cards;
+}
+
+function isJapanOnlyPath(pathNodeIds?: string[]) {
+  return pathNodeIds?.length === 1 && pathNodeIds[0] === "japan";
 }
 
 function roomStorageKey(tripId: string) {
@@ -1640,6 +1778,14 @@ function upsertMemberExploreState(
 
 function mergeUnique<T>(values: T[]) {
   return Array.from(new Set(values));
+}
+
+function normalizePersistedMessages(messages: ChatMessage[]) {
+  return messages.map((message) =>
+    message.id === "msg-2" && message.textContent === OLD_INTRO_AI_MESSAGE_TEXT
+      ? { ...message, textContent: INTRO_AI_MESSAGE_TEXT }
+      : message
+  );
 }
 
 function clampScore(value: number) {

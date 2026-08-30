@@ -58,20 +58,31 @@ export class EvidenceService {
   }
 
   async recordReaction(input: {
+    id?: string;
     tripId: string;
     memberId: string;
     nodeId: string;
     reaction: ReactionType;
     placeTitle?: string;
     visibility?: "group" | "ai_only";
+    createdAt?: string;
   }) {
+    const createdAt = input.createdAt ? new Date(input.createdAt) : new Date();
+    const messageId = input.id ?? `msg-${randomUUID()}`;
     const node = await prisma.destinationNode.findUnique({ where: { id: input.nodeId } });
-    const message = await prisma.chatMessage.create({
-      data: {
-        id: `msg-${randomUUID()}`,
+    const message = await prisma.chatMessage.upsert({
+      where: { id: messageId },
+      create: {
+        id: messageId,
         tripId: input.tripId,
         authorType: "system",
         messageType: "reaction_event",
+        textContent: `成员对「${input.placeTitle ?? node?.canonicalName ?? input.nodeId}」表达了 ${input.reaction}`,
+        payload: jsonInput({ nodeId: input.nodeId, reaction: input.reaction }),
+        visibility: input.visibility ?? "group",
+        createdAt
+      },
+      update: {
         textContent: `成员对「${input.placeTitle ?? node?.canonicalName ?? input.nodeId}」表达了 ${input.reaction}`,
         payload: jsonInput({ nodeId: input.nodeId, reaction: input.reaction }),
         visibility: input.visibility ?? "group"
@@ -96,6 +107,7 @@ export class EvidenceService {
   }
 
   async recordPlaceComment(input: {
+    id?: string;
     tripId: string;
     memberId: string;
     nodeId: string;
@@ -103,15 +115,27 @@ export class EvidenceService {
     sourceType: PlaceOpinionSourceType;
     visibility: "group" | "ai_only";
     sourceMessageId?: string;
+    createdAt?: string;
   }) {
+    const createdAt = input.createdAt ? new Date(input.createdAt) : new Date();
+    const opinionId = input.id ?? `op-${randomUUID()}`;
     const reaction = inferReaction(input.text);
-    const opinion = await prisma.placeOpinion.create({
-      data: {
-        id: `op-${randomUUID()}`,
+    const opinion = await prisma.placeOpinion.upsert({
+      where: { id: opinionId },
+      create: {
+        id: opinionId,
         tripId: input.tripId,
         nodeId: input.nodeId,
         memberId: input.memberId,
         sourceType: input.sourceType,
+        sourceMessageId: input.sourceMessageId,
+        content: input.text,
+        reaction,
+        visibility: input.visibility,
+        signalType: signalTypeForReaction(reaction),
+        createdAt
+      },
+      update: {
         sourceMessageId: input.sourceMessageId,
         content: input.text,
         reaction,
@@ -207,6 +231,8 @@ export class EvidenceService {
     memberId: string;
     text: string;
     visibility: "group" | "ai_only";
+    sourceEntityId?: string;
+    createdAt?: string;
   }) {
     return this.createEvidenceForTextTargets({
       tripId: input.tripId,
@@ -215,8 +241,8 @@ export class EvidenceService {
       visibility: input.visibility,
       evidenceType: "search",
       sourceEntityType: "search_input",
-      sourceEntityId: `search-${randomUUID()}`,
-      occurredAt: new Date(),
+      sourceEntityId: input.sourceEntityId ?? `search-${randomUUID()}`,
+      occurredAt: input.createdAt ? new Date(input.createdAt) : new Date(),
       rawPayload: { query: input.text }
     });
   }

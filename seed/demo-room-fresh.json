@@ -12,6 +12,7 @@
       { "id": "m-ding", "displayName": "丁丁", "avatarUrl": "丁", "role": "member" }
     ]
   },
+  "initialActiveMemberIds": ["m-anna"],
   "messages": [
     {
       "id": "msg-1",
@@ -28,7 +29,7 @@
       "tripId": "demo-japan-7d",
       "authorType": "ai",
       "messageType": "ai_card_batch",
-      "textContent": "可以，先不用急着定天数或路线。我先按日本下面的几个区域放一些具体地点，大家看到有感觉的直接点或说一句就行。",
+      "textContent": "好呀，目前有什么想法吗？如果说没有的话，可以在中间的探索区域里自行探索。",
       "visibility": "group",
       "payload": {
         "cardNodeIds": [
@@ -58,5 +59,6 @@
       },
       "createdAt": "2026-08-23T09:00:08.000Z"
     }
-  ]
+  ],
+  "seedEvents": []
 }
