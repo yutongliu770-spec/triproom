@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from "react";
 import Image from "next/image";
 import {
   ChevronRight,
@@ -273,7 +272,6 @@ function ImagePager({
   compact: boolean;
   onImageIndexChange: (index: number) => void;
 }) {
-  const [dragStartX, setDragStartX] = useState<number | null>(null);
   const activeImage = images[imageIndex] ?? images[0];
 
   function go(delta: number) {
@@ -281,36 +279,11 @@ function ImagePager({
     onImageIndexChange((imageIndex + delta + images.length) % images.length);
   }
 
-  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    event.stopPropagation();
-    setDragStartX(event.clientX);
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function handlePointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
-    event.stopPropagation();
-    if (dragStartX === null) return;
-    const delta = event.clientX - dragStartX;
-    if (delta < -42) go(1);
-    if (delta > 42) go(-1);
-    setDragStartX(null);
-  }
-
-  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || images.length <= 1) return;
-    event.preventDefault();
-    go(event.deltaX > 0 ? 1 : -1);
-  }
-
   return (
     <div
       className={`relative shrink-0 overflow-hidden bg-cloud transition-[height] duration-200 ${
         compact ? "h-[98px]" : "h-[150px] md:h-[168px]"
       }`}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerEnd}
-      onPointerCancel={() => setDragStartX(null)}
-      onWheel={handleWheel}
     >
       {activeImage && (
         <Image

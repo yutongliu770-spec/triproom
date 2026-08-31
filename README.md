@@ -139,7 +139,7 @@ Demo seed 定义初始化事实，以及用于稳定演示的确定性派生结�
 - 统一地点观点；
 - 成员级地点未读状态；
 - 当前探索焦点；
-- 中央探索卡片与当前卡片位置；
+- 中央探索卡片池；每个标签页保留自己的当前卡片位置，避免多个打开标签互相覆盖正在看的地点；
 - 成员级 Explore 状态，包括 `exploration_path`、搜索原始输入、当前聚焦范围、当前区域候选、偏好倾向、已看过的 Place 和当前卡片位置；
 - 结构方案与新版修订。
 
@@ -214,7 +214,7 @@ Explore 默认优先展示具体 Place，例如 attraction、district、area、l
 
 `StandardPlaceCard` 是当前详细 Place 展示的唯一标准组件。Explore 当前主卡、Map 点击地点、Discovered Mini Card 点击地点、Chat Place Reference 打开地点、Planning 方案地点打开后，都复用同一个 Standard Place Card，并通过同一个 `place_id / DestinationNode.id` 加载数据。
 
-Explore 中的 Standard Place Card 使用竖向卡片：顶部 `images[]` 支持固定高度横向切换、有效箭头、Swipe 和圆点指示；下半部分默认只保留城市 / 区域上下文、地点名、1-2 行简介、2-3 个亮点、建议游玩时间、粗预算、团队意愿、讨论热度、Reaction、右下角评论入口和小红书入口，保证单张卡在中央工作区主视口内尽量完整看完。城市 / 区域上下文胶囊本身是显式定位入口，点击后才切换 `exploration_path`，并会阻止外层卡片 Swipe 手势干扰。卡片内部不再重复显示“正在探索 XXX”，该状态只由卡片上方 Breadcrumb 表达。
+Explore 中的 Standard Place Card 使用竖向卡片：顶部 `images[]` 支持固定高度横向切换、有效箭头和圆点指示；卡片横向 Swipe 优先切换地点，避免用户在大图上滑动时只切图片、不切地点。下半部分默认只保留城市 / 区域上下文、地点名、1-2 行简介、2-3 个亮点、建议游玩时间、粗预算、团队意愿、讨论热度、Reaction、右下角评论入口和小红书入口，保证单张卡在中央工作区主视口内尽量完整看完。城市 / 区域上下文胶囊本身是显式定位入口，点击后才切换 `exploration_path`，并会阻止外层卡片 Swipe 手势干扰。卡片内部不再重复显示“正在探索 XXX”，该状态只由卡片上方 Breadcrumb 表达。
 
 评论入口显示的是当前 Room 围绕该 Place 的有效观点 / 内容数量，不是当前成员未读数。点击评论入口不会跳转页面，而是在 Standard Place Card 内让卡片缩小上移，并从底部弹出类似小红书 / 抖音评论区的面板。Comment Panel 顶部只展示 `感兴趣程度`、`团队兴趣` 进度条和一行 `讨论度` 状态；成员内容使用评论流样式展示，每条左侧是成员头像，右侧是成员名、表态和文字 / 语音观点，Demo 中会用 Mock 讨论补齐 A / B / C / D 的演示内容；底部保留小红书真实搜索入口，以及成员主动分享的小红书、抖音或外链 Material，并保留 `sourceProvider`、`sourceUrl` 和来源成员信息。关闭后恢复标准卡片默认状态。
 

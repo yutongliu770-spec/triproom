@@ -6,6 +6,7 @@ import { evidenceService } from "@/lib/preferences/evidence-service";
 import { constraintService } from "@/lib/preferences/constraint-service";
 import { preferenceReducer } from "@/lib/preferences/preference-reducer";
 import { getPreferenceState } from "@/lib/preferences/state";
+import { generateJapanPlanVariants } from "@/lib/plans/generator";
 import { travelPlanningService } from "@/lib/plans/service";
 import { reactionToSignal } from "@/lib/signals/reactions";
 import type { Material, ReactionType } from "@/lib/types";
@@ -62,7 +63,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const route = path.join("/");
   const body = await safeJson(request);
   const room = await getDemoRoom(tripId);
-  await ensureDemoRoomPersisted(tripId);
 
   if (route === "join") {
     return NextResponse.json({ trip: room.trip, member: room.trip.members[1] ?? room.trip.members[0] });
@@ -199,10 +199,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
         memberId: typeof body.memberId === "string" ? body.memberId : undefined
       }));
     } catch (error) {
-      return NextResponse.json(
-        { error: "Plan generation failed", detail: errorMessage(error) },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        ...mockPlanningPayload({
+          tripId,
+          totalDays: room.trip.tripDurationDays,
+          basedOnSignalIds: room.signals.map((signal) => signal.id),
+          fallbackReason: errorMessage(error)
+        }),
+        warning: "Plan generation used mock fallback because the live planning backend failed."
+      });
     }
   }
 
@@ -218,10 +223,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
             : "第二天太满了，轻松一点"
       }));
     } catch (error) {
-      return NextResponse.json(
-        { error: "Plan revision failed", detail: errorMessage(error) },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        ...mockPlanningPayload({
+          tripId,
+          totalDays: room.trip.tripDurationDays,
+          basedOnSignalIds: room.signals.map((signal) => signal.id),
+          parentPlanId: path[path.length - 2],
+          fallbackReason: errorMessage(error)
+        }),
+        warning: "Plan revision used mock fallback because the live planning backend failed."
+      });
     }
   }
 
@@ -261,6 +272,29 @@ async function safeJson(request: NextRequest) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown error";
+}
+
+function mockPlanningPayload(input: {
+  tripId: string;
+  totalDays?: number;
+  basedOnSignalIds?: string[];
+  parentPlanId?: string;
+  fallbackReason?: string;
+}) {
+  return {
+    planningContextSnapshotId: `mock-context-${input.tripId}`,
+    provider: {
+      name: "mock",
+      version: "demo-fallback-v1"
+    },
+    fallbackReason: input.fallbackReason,
+    plans: generateJapanPlanVariants({
+      tripId: input.tripId,
+      totalDays: input.totalDays ?? 7,
+      basedOnSignalIds: input.basedOnSignalIds,
+      parentPlanId: input.parentPlanId
+    })
+  };
 }
 
 function isReactionType(value: unknown): value is ReactionType {

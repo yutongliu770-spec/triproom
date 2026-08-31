@@ -10,6 +10,7 @@ import {
 } from "@/lib/graph/explore-recommendations";
 import { focusNode } from "@/lib/graph/exploration";
 import { detectMentionedPlaceIds } from "@/lib/graph/place-state";
+import { generateJapanPlanVariants } from "@/lib/plans/generator";
 import { reactionToSignal, summarizeSignals } from "@/lib/signals/reactions";
 import { extractFirstUrl, isDouyinContent, isXiaohongshuContent } from "@/lib/travel/social-discovery";
 import type {
@@ -270,7 +271,7 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     const channel = new BroadcastChannel(roomStorageKey(initialRoom.trip.id));
     channel.onmessage = (event: MessageEvent<{ sourceId: string; snapshot: RoomSnapshot }>) => {
       if (!event.data || event.data.sourceId === syncSourceId) return;
-      applySnapshot(event.data.snapshot);
+      applySnapshot(event.data.snapshot, { syncActiveExplore: false });
     };
 
     return () => channel.close();
@@ -332,7 +333,11 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     signals
   ]);
 
-  function applySnapshot(snapshot: RoomSnapshot) {
+  function applySnapshot(
+    snapshot: RoomSnapshot,
+    options: { syncActiveExplore?: boolean } = {}
+  ) {
+    const syncActiveExplore = options.syncActiveExplore ?? true;
     const nextActiveMemberIds = snapshot.activeMemberIds?.filter(Boolean).length ? snapshot.activeMemberIds : [
       initialRoom.trip.members[0]?.id ?? ""
     ];
@@ -383,16 +388,18 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     setRoomNodeStates(snapshot.roomNodeStates);
     setPlaceOpinions(snapshot.placeOpinions ?? []);
     setMemberPlaceStates(snapshot.memberPlaceStates ?? []);
-    setCurrentFocusNodeId(shouldRestoreJapanScopeCards ? "japan" : snapshot.currentFocusNodeId);
-    setActiveCards(restoredActiveCards);
-    setActiveCardIndex(
-      Math.min(restoredActiveCardIndex, Math.max(0, restoredActiveCards.length - 1))
-    );
-    setMemberExploreStates(normalizedExploreStates);
-    setCardsByNodeId({
-      ...(snapshot.cardsByNodeId ?? {}),
-      ...cardsToRecord(restoredActiveCards)
-    });
+    if (syncActiveExplore) {
+      setCurrentFocusNodeId(shouldRestoreJapanScopeCards ? "japan" : snapshot.currentFocusNodeId);
+      setActiveCards(restoredActiveCards);
+      setActiveCardIndex(
+        Math.min(restoredActiveCardIndex, Math.max(0, restoredActiveCards.length - 1))
+      );
+      setMemberExploreStates(normalizedExploreStates);
+      setCardsByNodeId({
+        ...(snapshot.cardsByNodeId ?? {}),
+        ...cardsToRecord(restoredActiveCards)
+      });
+    }
     setActiveMemberIds(nextActiveMemberIds);
     window.setTimeout(() => {
       applyingRemoteSnapshot.current = false;
@@ -789,8 +796,19 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
       addAiMessage("我按当前 Room 偏好和讨论生成了候选方案，并已完成规则校验和评分。", {
         planIds: payload.plans.map((plan) => plan.id)
       });
-    } catch (error) {
-      setPlanningError(error instanceof Error ? error.message : "生成方案失败");
+    } catch {
+      const fallbackPlans = generateJapanPlanVariants({
+        tripId: initialRoom.trip.id,
+        totalDays: initialRoom.trip.tripDurationDays ?? 7,
+        basedOnSignalIds: signals.map((signal) => signal.id)
+      });
+      setPlans(fallbackPlans);
+      setSelectedPlanId(fallbackPlans[0]?.id);
+      setWorkspaceMode("planning");
+      setPlanningError("真实规划服务暂时不可用，已切换到 Mock Demo 方案。");
+      addAiMessage("真实规划服务暂时不可用，我先生成一组可演示的 Mock 候选方案。", {
+        planIds: fallbackPlans.map((plan) => plan.id)
+      });
     } finally {
       setPlanningStatus("idle");
     }
@@ -846,8 +864,23 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
         `我根据「${instruction.trim() || "第二天太满了，轻松一点"}」生成了新版方案，并重新校验评分。`,
         { planIds: payload.plans.map((item) => item.id) }
       );
-    } catch (error) {
-      setPlanningError(error instanceof Error ? error.message : "修订方案失败");
+    } catch {
+      const fallbackPlans = generateJapanPlanVariants({
+        tripId: initialRoom.trip.id,
+        totalDays: initialRoom.trip.tripDurationDays ?? 7,
+        basedOnSignalIds: signals.map((signal) => signal.id),
+        parentPlanId: plan.id
+      });
+      setPlans((current) => [
+        ...current.map((item) => item.id === plan.id ? { ...item, status: "superseded" as const } : item),
+        ...fallbackPlans
+      ]);
+      setSelectedPlanId(fallbackPlans[0]?.id ?? plan.id);
+      setWorkspaceMode("planning");
+      setPlanningError("真实修订服务暂时不可用，已切换到 Mock Demo 新版方案。");
+      addAiMessage("真实修订服务暂时不可用，我先根据反馈生成一组可演示的 Mock 新版方案。", {
+        planIds: fallbackPlans.map((item) => item.id)
+      });
     } finally {
       setPlanningStatus("idle");
     }
@@ -1080,17 +1113,27 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
 
   function handleActiveCardIndexChange(index: number) {
     const nextIndex = Math.max(0, Math.min(activeCards.length - 1, index));
-    setActiveCardIndex(nextIndex);
+    const nextCards =
+      nextIndex > 0
+        ? [...activeCards.slice(nextIndex), ...activeCards.slice(0, nextIndex)]
+        : activeCards;
+    setActiveCards(nextCards);
+    setActiveCardIndex(0);
 
     setMemberExploreStates((current) => {
       const existing =
         current.find((state) => state.memberId === currentMember.id) ?? currentExploreState;
       return upsertMemberExploreState(current, {
         ...existing,
-        currentCardIndex: nextIndex,
+        currentCardIndex: 0,
+        seenPlaceIds: mergeUnique([
+          ...existing.seenPlaceIds,
+          ...(nextCards[0]?.nodeId ? [nextCards[0].nodeId] : [])
+        ]).slice(-80),
         updatedAt: new Date().toISOString()
       });
     });
+    rememberCards(nextCards);
   }
 
   function handleExplorePathBack() {

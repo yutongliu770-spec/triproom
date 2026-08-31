@@ -53,6 +53,7 @@ export function TravelCardBatch({
   onExploreAreaFocus: (nodeId: string) => void;
 }) {
   const dragStartX = useRef<number | null>(null);
+  const dragOffsetRef = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
   const clampedIndex = Math.min(Math.max(activeIndex, 0), Math.max(0, cards.length - 1));
   const activeCard = cards[clampedIndex]!;
@@ -71,8 +72,13 @@ export function TravelCardBatch({
   }
 
   function goTo(index: number) {
+    dragOffsetRef.current = 0;
     setDragOffset(0);
-    onActiveIndexChange(Math.max(0, Math.min(cards.length - 1, index)));
+    if (cards.length <= 1) {
+      onActiveIndexChange(0);
+      return;
+    }
+    onActiveIndexChange((index + cards.length) % cards.length);
   }
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
@@ -84,14 +90,20 @@ export function TravelCardBatch({
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (dragStartX.current === null) return;
     const nextOffset = event.clientX - dragStartX.current;
-    setDragOffset(Math.max(-160, Math.min(160, nextOffset)));
+    const boundedOffset = Math.max(-160, Math.min(160, nextOffset));
+    dragOffsetRef.current = boundedOffset;
+    setDragOffset(boundedOffset);
   }
 
   function handlePointerEnd() {
     if (dragStartX.current === null) return;
-    if (dragOffset < -72) goTo(clampedIndex + 1);
-    else if (dragOffset > 72) goTo(clampedIndex - 1);
-    else setDragOffset(0);
+    const finalOffset = dragOffsetRef.current;
+    if (finalOffset < -72) goTo(clampedIndex + 1);
+    else if (finalOffset > 72) goTo(clampedIndex - 1);
+    else {
+      dragOffsetRef.current = 0;
+      setDragOffset(0);
+    }
     dragStartX.current = null;
   }
 
@@ -112,7 +124,7 @@ export function TravelCardBatch({
           type="button"
           className="focus-ring grid size-8 place-items-center rounded-full bg-white text-ink shadow-[0_8px_20px_rgba(23,33,31,0.08)] disabled:opacity-35"
           aria-label="向左滑动卡片"
-          disabled={clampedIndex === 0}
+          disabled={cards.length <= 1}
           onClick={() => goTo(clampedIndex - 1)}
         >
           <ChevronLeft size={18} aria-hidden="true" />
@@ -121,7 +133,7 @@ export function TravelCardBatch({
           type="button"
           className="focus-ring grid size-8 place-items-center rounded-full bg-white text-ink shadow-[0_8px_20px_rgba(23,33,31,0.08)] disabled:opacity-35"
           aria-label="向右滑动卡片"
-          disabled={clampedIndex === cards.length - 1}
+          disabled={cards.length <= 1}
           onClick={() => goTo(clampedIndex + 1)}
         >
           <ChevronRight size={18} aria-hidden="true" />
@@ -130,10 +142,10 @@ export function TravelCardBatch({
 
       <div
         className="relative min-h-0 flex-1 overflow-hidden px-1 pb-2 [touch-action:pan-y]"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
+        onPointerDownCapture={handlePointerDown}
+        onPointerMoveCapture={handlePointerMove}
+        onPointerUpCapture={handlePointerEnd}
+        onPointerCancelCapture={handlePointerEnd}
       >
         {nextCard && (
           <div
