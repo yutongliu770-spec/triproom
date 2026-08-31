@@ -197,8 +197,9 @@ export function recommendExploreCards(input: {
     focusNodeId = "japan";
   }
 
+  const uniqueCandidates = uniqueNodes(candidates);
   const ranked = rankCandidates({
-    candidates,
+    candidates: uniqueCandidates,
     nodes: input.nodes,
     signals: input.signals,
     roomNodeStates: input.roomNodeStates,
@@ -211,7 +212,7 @@ export function recommendExploreCards(input: {
     ? interleaveByCluster(ranked, input.nodes)
     : ranked;
   const selected = ordered.slice(0, MAX_SCOPE_CARD_COUNT);
-  const fallback = selected.length > 0 ? selected : candidates.slice(0, MAX_SCOPE_CARD_COUNT);
+  const fallback = fillRecommendationDeck(selected, uniqueCandidates);
   const cards = fallback.map((node) => createTravelCard(node, input.relations));
   const shownIds = cards.map((card) => card.nodeId);
 
@@ -248,6 +249,23 @@ export function placeContextForNode(nodeId: string, nodes: DestinationNode[]) {
       .filter(Boolean)
       .join(" · ")
   };
+}
+
+function fillRecommendationDeck(
+  selected: DestinationNode[],
+  candidates: DestinationNode[]
+) {
+  const selectedIds = new Set(selected.map((node) => node.id));
+  const filled = [...selected];
+
+  for (const candidate of candidates) {
+    if (filled.length >= MAX_SCOPE_CARD_COUNT) break;
+    if (selectedIds.has(candidate.id)) continue;
+    selectedIds.add(candidate.id);
+    filled.push(candidate);
+  }
+
+  return filled;
 }
 
 function rankCandidates(input: {

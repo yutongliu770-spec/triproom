@@ -75,6 +75,7 @@ const INTRO_AI_MESSAGE_TEXT =
   "好呀，目前有什么想法吗？如果说没有的话，可以在中间的探索区域里自行探索。";
 const OLD_INTRO_AI_MESSAGE_TEXT =
   "可以，先不用急着定天数或路线。我先按日本下面的几个区域放一些具体地点，大家看到有感觉的直接点或说一句就行。";
+const MIN_EXPLORE_DECK_SIZE = 2;
 
 export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
   const initialMemberId = initialRoom.trip.members[0]?.id ?? "";
@@ -163,9 +164,11 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
     members: activeMembers,
     currentFocusNodeId
   };
-  const currentExploreState =
-    memberExploreStates.find((state) => state.memberId === currentMember.id) ??
-    {
+  const currentExploreState = useMemo(() => {
+    const existing = memberExploreStates.find((state) => state.memberId === currentMember.id);
+    if (existing) return existing;
+
+    return {
       ...createInitialExploreState({
         tripId: initialRoom.trip.id,
         memberId: currentMember.id,
@@ -174,6 +177,7 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
       explorationPathNodeIds: ["japan"],
       searchQuery: ""
     };
+  }, [activeCards, currentMember.id, initialRoom.trip.id, memberExploreStates]);
   const activeExplorePlaceId = activeCards[activeCardIndex]?.nodeId;
   const selectedPlan = selectedPlanId ? plans.find((plan) => plan.id === selectedPlanId) : undefined;
   const activeMapPlaceId = selectedPlaceId ?? selectedPlan?.route?.nodeIds[0] ?? activeExplorePlaceId;
@@ -276,6 +280,57 @@ export function RoomExperience({ initialRoom }: { initialRoom: DemoRoomData }) {
   useEffect(() => {
     setActiveCardIndex((current) => Math.min(current, Math.max(0, activeCards.length - 1)));
   }, [activeCards.length]);
+
+  useEffect(() => {
+    if (activeCards.length >= MIN_EXPLORE_DECK_SIZE) return;
+
+    const repairedCards = createExploreScopeCards({
+      tripId: initialRoom.trip.id,
+      memberId: currentMember.id,
+      nodes,
+      relations,
+      signals,
+      roomNodeStates,
+      state: currentExploreState,
+      preferredCard: activeCards[activeCardIndex]
+    });
+    if (repairedCards.length <= activeCards.length) return;
+
+    const preferredNodeId = activeCards[activeCardIndex]?.nodeId;
+    const nextIndex = preferredNodeId
+      ? Math.max(0, repairedCards.findIndex((card) => card.nodeId === preferredNodeId))
+      : 0;
+
+    setActiveCards(repairedCards);
+    setActiveCardIndex(nextIndex);
+    setMemberExploreStates((current) => {
+      const existing =
+        current.find((state) => state.memberId === currentMember.id) ?? currentExploreState;
+      return upsertMemberExploreState(current, {
+        ...existing,
+        seenPlaceIds: mergeUnique([
+          ...existing.seenPlaceIds,
+          ...repairedCards.map((card) => card.nodeId)
+        ]).slice(-80),
+        currentCardIndex: nextIndex,
+        updatedAt: new Date().toISOString()
+      });
+    });
+    setCardsByNodeId((current) => ({
+      ...current,
+      ...cardsToRecord(repairedCards)
+    }));
+  }, [
+    activeCardIndex,
+    activeCards,
+    currentExploreState,
+    currentMember.id,
+    initialRoom.trip.id,
+    nodes,
+    relations,
+    roomNodeStates,
+    signals
+  ]);
 
   function applySnapshot(snapshot: RoomSnapshot) {
     const nextActiveMemberIds = snapshot.activeMemberIds?.filter(Boolean).length ? snapshot.activeMemberIds : [
@@ -1488,6 +1543,73 @@ function createJapanScopeCards(input: {
     },
     action: { type: "initial" }
   }).cards;
+}
+
+function createExploreScopeCards(input: {
+  tripId: string;
+  memberId: string;
+  nodes: DemoRoomData["nodes"];
+  relations: DemoRoomData["relations"];
+  signals: MemberSignal[];
+  roomNodeStates: RoomNodeState[];
+  state: MemberExploreState;
+  preferredCard?: TravelCard;
+}) {
+  const pathNodeIds = input.state.explorationPathNodeIds?.filter((nodeId) =>
+    input.nodes.some((node) => node.id === nodeId)
+  );
+  const targetNodeId =
+    pathNodeIds?.at(-1) ??
+    input.state.currentScopeNodeId ??
+    input.state.currentClusterNodeId ??
+    input.preferredCard?.nodeId ??
+    "japan";
+  const targetNode = input.nodes.find((node) => node.id === targetNodeId);
+  const scopeNode =
+    targetNode?.nodeType === "country"
+      ? undefined
+      : targetNode && isClusterNode(targetNode)
+        ? targetNode
+        : targetNode
+          ? cityScopeForNode(targetNode, input.nodes)
+          : undefined;
+  const stateForRecommendation: MemberExploreState = {
+    ...input.state,
+    currentScopeNodeId: scopeNode?.id,
+    currentClusterNodeId: scopeNode?.id,
+    explorationPathNodeIds:
+      pathNodeIds?.length && targetNode?.nodeType !== "country"
+        ? pathNodeIds
+        : targetNode?.nodeType === "country"
+          ? [targetNode.id]
+          : scopeNode
+            ? pathNodeIdsForNode(scopeNode.id, input.nodes)
+            : ["japan"]
+  };
+  const cards = recommendExploreBatch({
+    tripId: input.tripId,
+    memberId: input.memberId,
+    nodes: input.nodes,
+    relations: input.relations,
+    signals: input.signals,
+    roomNodeStates: input.roomNodeStates,
+    previousState: stateForRecommendation,
+    action: { type: "initial" }
+  }).cards;
+  const cardIds = new Set(cards.map((card) => card.nodeId));
+  const preferredCard =
+    input.preferredCard && cardIds.has(input.preferredCard.nodeId) ? input.preferredCard : undefined;
+
+  return mergeUniqueCards([preferredCard, ...cards].filter((card): card is TravelCard => Boolean(card)));
+}
+
+function mergeUniqueCards(cards: TravelCard[]) {
+  const seen = new Set<string>();
+  return cards.filter((card) => {
+    if (seen.has(card.nodeId)) return false;
+    seen.add(card.nodeId);
+    return true;
+  });
 }
 
 function isJapanOnlyPath(pathNodeIds?: string[]) {
