@@ -5,6 +5,10 @@ dist
 coverage
 .env
 .env.local
+deploy/env.production
 .DS_Store
 *.log
 *.tsbuildinfo
+
+# Local Netlify folder
+.netlify

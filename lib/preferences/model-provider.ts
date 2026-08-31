@@ -194,6 +194,7 @@ export class DeepSeekModelProvider implements ModelProvider {
 
   private readonly baseUrl = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
   private readonly apiKey = process.env.DEEPSEEK_API_KEY || process.env.MODEL_API_KEY;
+  private readonly requestTimeoutMs = 8500;
 
   async analyzeEvidence(evidence: EvidenceForAnalysis) {
     const fallback = new MockModelProvider();
@@ -339,22 +340,36 @@ export class DeepSeekModelProvider implements ModelProvider {
   }
 
   private async chatJson(input: { system: string; user: string }) {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: this.version,
-        messages: [
-          { role: "system", content: input.system },
-          { role: "user", content: input.user }
-        ],
-        temperature: 0.35,
-        response_format: { type: "json_object" }
-      })
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: this.version,
+          messages: [
+            { role: "system", content: input.system },
+            { role: "user", content: input.user }
+          ],
+          temperature: 0.35,
+          response_format: { type: "json_object" }
+        })
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`DeepSeek request timed out after ${this.requestTimeoutMs}ms.`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const detail = await response.text();

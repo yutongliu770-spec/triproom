@@ -119,6 +119,25 @@ Demo seed 定义初始化事实，以及用于稳定演示的确定性派生结�
 - `/demo/quick`：跳转到 `/room/demo-japan-quick`，用于评委快速看到多人探索、地图点亮、分歧和素材沉淀。
 - `/demo/fresh`：跳转到 `/room/demo-japan-7d`，用于展示从“我们想去日本旅游”开始的冷启动。
 
+## 公网部署
+
+当前保留 Vercel 作为主部署，同时提供 Netlify 免费默认域名作为中国大陆网络备用入口：
+
+- Vercel：继续由 GitHub / Vercel 自动部署维护。
+- Netlify 备用入口：`https://triproom-demo.netlify.app/room/demo-japan-7d`。
+
+Netlify 使用同一套 Next.js App Router、Prisma、Neon PostgreSQL 和 DeepSeek 环境变量，不复制业务逻辑。Netlify 最小配置位于 `netlify.toml`，本地缓存、依赖和 secret 通过 `.netlifyignore` 排除。因为 Netlify Functions 在 Linux runtime 运行，Prisma Client 需要在 `prisma/schema.prisma` 中包含 `rhel-openssl-3.0.x` binary target。
+
+Netlify 生产环境至少需要配置：
+
+- `DATABASE_URL`
+- `MODEL_PROVIDER=deepseek`
+- `DEEPSEEK_API_KEY`
+- `DEEPSEEK_BASE_URL`
+- `DEEPSEEK_MODEL`
+- `MODEL_NAME`
+- `TRAVEL_PROVIDER=mock`
+
 ## Solo / Group Demo 行为
 
 当前 MVP 没有正式账户体系。Fresh Demo 默认以 1 位成员进入 Solo Room，初始只知道“想去日本旅游”，不预设天数、城市、景点、预算或路线方向。点击左侧 `+ 邀请旅伴` 会依次加入 Demo 成员，Room 从 1 人自然变成 2+ 人 Group Room。Quick Demo 默认激活 A / B / C / D 四位成员，并带有一部分已经发生过的探索事实，但仍复用同一个 Room 页面和数据模型。
