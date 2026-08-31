@@ -10,6 +10,8 @@ import { travelPlanningService } from "@/lib/plans/service";
 import { reactionToSignal } from "@/lib/signals/reactions";
 import type { Material, ReactionType } from "@/lib/types";
 
+export const maxDuration = 60;
+
 interface RouteContext {
   params: Promise<{
     tripId: string;
@@ -191,22 +193,36 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   if (route === "plans/generate") {
-    return NextResponse.json(await travelPlanningService.generatePlans({
-      tripId,
-      memberId: typeof body.memberId === "string" ? body.memberId : undefined
-    }));
+    try {
+      return NextResponse.json(await travelPlanningService.generatePlans({
+        tripId,
+        memberId: typeof body.memberId === "string" ? body.memberId : undefined
+      }));
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Plan generation failed", detail: errorMessage(error) },
+        { status: 500 }
+      );
+    }
   }
 
   if (route.endsWith("/revise")) {
-    return NextResponse.json(await travelPlanningService.revisePlan({
-      tripId,
-      planId: path[path.length - 2],
-      memberId: typeof body.memberId === "string" ? body.memberId : undefined,
-      instruction:
-        typeof body.instruction === "string" && body.instruction.trim()
-          ? body.instruction.trim()
-          : "第二天太满了，轻松一点"
-    }));
+    try {
+      return NextResponse.json(await travelPlanningService.revisePlan({
+        tripId,
+        planId: path[path.length - 2],
+        memberId: typeof body.memberId === "string" ? body.memberId : undefined,
+        instruction:
+          typeof body.instruction === "string" && body.instruction.trim()
+            ? body.instruction.trim()
+            : "第二天太满了，轻松一点"
+      }));
+    } catch (error) {
+      return NextResponse.json(
+        { error: "Plan revision failed", detail: errorMessage(error) },
+        { status: 500 }
+      );
+    }
   }
 
   if (route === "ai/process-event") {

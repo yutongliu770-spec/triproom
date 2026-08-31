@@ -373,7 +373,7 @@ npm run build
 
 `DestinationNode` 预留 `social_discovery` JSON 字段，用于保存 Place 级外部探索入口 metadata。当前运行时由 `social-discovery.ts` 生成小红书搜索 URL；正式接入授权社交内容 Provider 时可写入该字段。
 
-Planning 主链由 `PlanningContextBuilder -> TravelPlanningService -> ModelProvider.generateTravelPlans() -> PlanValidator -> PlanningScorer -> PlanVariant` 组成。生成方案时会创建 `PlanningContextSnapshot`，DeepSeek 只读取该快照整理出的 Room / Member / Place / Preference / Constraint 上下文；后端再执行确定性校验、评分并持久化 `PlanVariant` 的完整日程、路线、分数、校验结果和模型信息。AI Revision 通过 `POST /api/trips/:tripId/plans/:planId/revise` 创建新的 PlanVersion，并把原方案标记为 `superseded`。
+Planning 主链由 `PlanningContextBuilder -> TravelPlanningService -> ModelProvider.generateTravelPlans() -> PlanValidator -> PlanningScorer -> PlanVariant` 组成。生成方案时会创建 `PlanningContextSnapshot`，DeepSeek 只读取该快照整理出的 Room / Member / Place / Preference / Constraint 上下文；后端再执行确定性校验、评分并持久化 `PlanVariant` 的完整日程、路线、分数、校验结果和模型信息。Hackathon Demo 中，`POST /plans/generate` 会优先复用已持久化、`modelName=deepseek` 且校验通过的候选方案，避免现场反复等待模型或触发 Vercel 函数超时；没有可复用方案时才实时调用 DeepSeek。AI Revision 通过 `POST /api/trips/:tripId/plans/:planId/revise` 创建新的 PlanVersion，并把原方案标记为 `superseded`；已有可复用 DeepSeek Revision 时同样优先快速返回。
 
 ```bash
 npm run db:generate

@@ -18,6 +18,18 @@ export class TravelPlanningService {
   }
 
   async generatePlans(input: { tripId: string; memberId?: string }) {
+    const reusablePlans = await findReusableCandidatePlans(input.tripId);
+    if (reusablePlans.length >= 2) {
+      return {
+        planningContextSnapshotId: reusablePlans[0].planningContextSnapshotId,
+        provider: {
+          name: reusablePlans[0].modelName ?? modelProvider.name,
+          version: reusablePlans[0].modelVersion ?? modelProvider.version
+        },
+        plans: withPresentationStatuses(reusablePlans)
+      };
+    }
+
     const context = await planningContextBuilder.build({
       tripId: input.tripId,
       createdByMemberId: input.memberId,
@@ -45,6 +57,18 @@ export class TravelPlanningService {
   }) {
     const existing = await prisma.planVariant.findUnique({ where: { id: input.planId } });
     if (!existing) throw new Error(`Plan not found: ${input.planId}`);
+
+    const reusableRevisions = await findReusableRevisions(input.tripId, input.planId);
+    if (reusableRevisions.length >= 1) {
+      return {
+        planningContextSnapshotId: reusableRevisions[0].planningContextSnapshotId,
+        provider: {
+          name: reusableRevisions[0].modelName ?? modelProvider.name,
+          version: reusableRevisions[0].modelVersion ?? modelProvider.version
+        },
+        plans: withPresentationStatuses(reusableRevisions)
+      };
+    }
 
     const context = await planningContextBuilder.build({
       tripId: input.tripId,
@@ -153,6 +177,54 @@ export class TravelPlanningService {
 }
 
 export const travelPlanningService = new TravelPlanningService();
+
+async function findReusableCandidatePlans(tripId: string) {
+  const records = await prisma.planVariant.findMany({
+    where: {
+      tripId,
+      parentPlanId: null,
+      modelName: "deepseek"
+    },
+    orderBy: { version: "desc" },
+    take: 3
+  });
+  return records
+    .map(serializePlanVariant)
+    .filter(isReusablePlan)
+    .sort((a, b) => a.version - b.version);
+}
+
+async function findReusableRevisions(tripId: string, parentPlanId: string) {
+  const records = await prisma.planVariant.findMany({
+    where: {
+      tripId,
+      parentPlanId,
+      modelName: "deepseek"
+    },
+    orderBy: { version: "desc" },
+    take: 3
+  });
+  return records
+    .map(serializePlanVariant)
+    .filter(isReusablePlan)
+    .sort((a, b) => a.version - b.version);
+}
+
+function isReusablePlan(plan: PlanVariant) {
+  return Boolean(
+    plan.validation?.passed &&
+      plan.itinerary?.length &&
+      plan.route?.nodeIds.length &&
+      plan.modelName === "deepseek"
+  );
+}
+
+function withPresentationStatuses(plans: PlanVariant[]) {
+  return plans.map((plan, index) => ({
+    ...plan,
+    status: index === 0 ? "active" as const : "draft" as const
+  }));
+}
 
 function toPromptInput(context: PlanningContext) {
   return {
