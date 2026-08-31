@@ -34,13 +34,6 @@ export default function HomePage() {
             <CreateRoomForm />
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href="/room/demo-japan-7d"
-                className="focus-ring inline-flex items-center gap-2 rounded-full bg-coral px-5 py-3 text-sm font-semibold text-white shadow-soft"
-              >
-                进入 TripRoom
-                <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-              <Link
                 href="/room/demo-japan-7d/join"
                 className="focus-ring inline-flex items-center gap-2 rounded-full border border-ink/15 bg-white px-5 py-3 text-sm font-semibold text-ink"
               >
